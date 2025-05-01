@@ -114,7 +114,8 @@
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [password, setPassword] = useState("");
-      const [error, setError] = useState("");
+      const [error, setError] = useState(""); // General errors (e.g., login, CSV)
+      const [pdfError, setPdfError] = useState(""); // PDF-specific errors
       const [students, setStudents] = useState([]);
       const [invalidReceipts, setInvalidReceipts] = useState([]);
       const [newStudent, setNewStudent] = useState({ name: "", expectedAmount: "" });
@@ -334,10 +335,29 @@
         setStudents(prev => prev.filter(s => s.id !== id));
       };
 
+      // Validate PDF file by checking magic number
+      const validatePDFFile = async (file) => {
+        try {
+          const arrayBuffer = await file.slice(0, 5).arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const magicNumber = String.fromCharCode(...uint8Array);
+          return magicNumber === "%PDF-";
+        } catch (err) {
+          console.error(`Error validating PDF ${file.name}:`, err);
+          return false;
+        }
+      };
+
       // Process PDF
       const processPDF = async (file) => {
         console.log(`Processing PDF: ${file.name}`);
         try {
+          // Validate PDF magic number
+          const isValidPDF = await validatePDFFile(file);
+          if (!isValidPDF) {
+            throw new Error("Invalid PDF format: File does not start with %PDF-");
+          }
+
           const arrayBuffer = await file.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           let text = "";
@@ -375,8 +395,8 @@
           if (!matchedStudent || !extractedAmount) {
             const reason = !matchedStudent ? "No name found" : "No amount found";
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
-            const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text });
-            setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text }]);
+            const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
+            setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
             return;
           }
 
@@ -392,18 +412,32 @@
           ));
         } catch (err) {
           console.error(`Error processing ${file.name}:`, err);
-          setError(`Failed to process ${file.name}: ${err.message}`);
+          let userFriendlyMessage = "The file may be corrupted or not a valid PDF. Please upload a different file.";
+          if (err.message.includes("Invalid PDF format")) {
+            userFriendlyMessage = "The file is not a valid PDF. Please upload a different file.";
+          } else if (err.message.includes("doc is not defined")) {
+            userFriendlyMessage = "The file could not be read as a PDF. It may be corrupted or in an unsupported format.";
+          } else if (err.message.includes("Invalid PDF structure")) {
+            userFriendlyMessage = "The PDF structure is invalid. Please upload a different file.";
+          }
+          
+          // Log to Invalid Receipts even if PDF can't be processed
+          const reason = `Failed to process: ${userFriendlyMessage}`;
+          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: "Unable to extract text" });
+          setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: "Unable to extract text" }]);
+          
+          setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
         }
       };
 
       // Handle PDF file upload (sequential processing)
       const handleFileUpload = async (files) => {
-        const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf");
+        const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf" || f.name.endsWith(".pdf"));
         if (pdfFiles.length === 0) {
-          setError("Please upload valid PDF files");
+          setPdfError("Please upload files with a .pdf extension");
           return;
         }
-        setError("");
+        setPdfError("");
         for (const file of pdfFiles) {
           await processPDF(file);
         }
@@ -572,6 +606,7 @@
             {/* PDF Upload with Drag-and-Drop */}
             <div className="bg-white p-6 rounded shadow-md mb-6">
               <h2 className="text-xl font-bold mb-4">Upload Receipts</h2>
+              {pdfError && <p className="text-red-500 mb-4">{pdfError}</p>}
               <div
                 className={`border-2 border-dashed rounded p-6 text-center ${
                   isDragging ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
