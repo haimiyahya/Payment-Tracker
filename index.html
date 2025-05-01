@@ -60,7 +60,7 @@
     // Initialize Dexie.js for IndexedDB
     const db = new Dexie("PaymentTrackerDB");
     db.version(1).stores({
-      students: "++id,name,expectedAmount,paidAmount,status",
+      students: "++id,name,expectedAmount,paidAmount,status,pdfFilename",
       invalidReceipts: "++id,filename,reason,data",
       settings: "key,value"
     });
@@ -153,7 +153,8 @@
         const invalidData = await db.invalidReceipts.toArray();
         setStudents(studentsData.map(s => ({
           ...s,
-          status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched")
+          status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+          pdfFilename: s.pdfFilename || null
         })));
         setInvalidReceipts(invalidData);
       };
@@ -195,7 +196,8 @@
           name: name.trim(),
           expectedAmount: parseFloat(expectedAmount).toFixed(2),
           paidAmount: null,
-          status: "No File Matched"
+          status: "No File Matched",
+          pdfFilename: null
         };
         const id = await db.students.add(student);
         setStudents(prev => [...prev, { ...student, id }]);
@@ -250,7 +252,8 @@
                   name,
                   expectedAmount: expectedAmount.toFixed(2),
                   paidAmount: null,
-                  status: "No File Matched"
+                  status: "No File Matched",
+                  pdfFilename: null
                 });
               }
 
@@ -378,10 +381,14 @@
           }
 
           const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
-          console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}`);
-          await db.students.update(matchedStudent.id, { paidAmount: extractedAmount.toFixed(2), status });
+          console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}, PDF=${file.name}`);
+          await db.students.update(matchedStudent.id, { 
+            paidAmount: extractedAmount.toFixed(2), 
+            status, 
+            pdfFilename: file.name 
+          });
           setStudents(prev => prev.map(s => 
-            s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), status } : s
+            s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), status, pdfFilename: file.name } : s
           ));
         } catch (err) {
           console.error(`Error processing ${file.name}:`, err);
@@ -427,31 +434,37 @@
           return;
         }
         const student = students.find(s => s.id === parseInt(studentId));
+        const receipt = invalidReceipts.find(r => r.id === receiptId);
         const status = parseFloat(amount).toFixed(2) === student.expectedAmount ? "Paid" : "Incorrect";
-        await db.students.update(student.id, { paidAmount: parseFloat(amount).toFixed(2), status });
+        await db.students.update(student.id, { 
+          paidAmount: parseFloat(amount).toFixed(2), 
+          status, 
+          pdfFilename: receipt.filename 
+        });
         await db.invalidReceipts.delete(receiptId);
         setStudents(prev => prev.map(s => 
-          s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), status } : s
+          s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), status, pdfFilename: receipt.filename } : s
         ));
         setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
       };
 
       // Delete payment
       const deletePayment = async (id) => {
-        await db.students.update(id, { paidAmount: null, status: "No File Matched" });
+        await db.students.update(id, { paidAmount: null, status: "No File Matched", pdfFilename: null });
         setStudents(prev => prev.map(s => 
-          s.id === id ? { ...s, paidAmount: null, status: "No File Matched" } : s
+          s.id === id ? { ...s, paidAmount: null, status: "No File Matched", pdfFilename: null } : s
         ));
       };
 
       // Export to CSV
       const exportToCSV = () => {
-        const headers = ["Name", "Expected Amount", "Paid Amount", "Status"];
+        const headers = ["Name", "Expected Amount", "Paid Amount", "Status", "PDF File"];
         const rows = students.map(s => [
           s.name,
           s.expectedAmount,
           s.paidAmount || "",
-          s.status
+          s.status,
+          s.pdfFilename || ""
         ]);
         const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
@@ -481,7 +494,7 @@
               {error && <p className="text-red-500 mb-4">{error}</p>}
               <form onSubmit={handleLogin}>
                 <input
-                  type="password"
+                  type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
@@ -624,6 +637,99 @@
                     <th className="border p-2">Expected Amount</th>
                     <th className="border p-2">Paid Amount</th>
                     <th className="border p-2">Status</th>
+                    <th className="border p-2">PDF File</th>
+                    <th className="border p-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStudents.map(student => (
+                    <tr key={student.id} className="hover:bg-gray-100">
+                      <td className="border(and drop a CSV file with student names and expected amounts, or click to select</p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => handleCSVUpload(e.target.files)}
+                  className="hidden"
+                  id="csvInput"
+                />
+                <label
+                  htmlFor="csvInput"
+                  className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
+                >
+                  Select CSV File
+                </label>
+              </div>
+            </div>
+
+            {/* PDF Upload with Drag-and-Drop */}
+            <div className="bg-white p-6 rounded shadow-md mb-6">
+              <h2 className="text-xl font-bold mb-4">Upload Receipts</h2>
+              <div
+                className={`border-2 border-dashed rounded p-6 text-center ${
+                  isDragging ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <p className="mb-4">Drag and drop PDF files here or click to select</p>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  multiple
+                  onChange={(e) => handleFileUpload(e.target.files)}
+                  className="hidden"
+                  id="fileInput"
+                />
+                <label
+                  htmlFor="fileInput"
+                  className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
+                >
+                  Select Files
+                </label>
+              </div>
+            </div>
+
+            {/* Dashboard */}
+            <div className="bg-white p-6 rounded shadow-md mb-6">
+              <h2 className="text-xl font-bold mb-4">Payment Status</h2>
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="p-2 border rounded"
+                >
+                  <option value="All">All</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Unpaid">Unpaid</option>
+                  <option value="Incorrect">Incorrect</option>
+                  <option value="No File Matched">No File Matched</option>
+                </select>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="p-2 border rounded"
+                >
+                  <option value="name-asc">Name (A-Z)</option>
+                  <option value="name-desc">Name (Z-A)</option>
+                  <option value="status-asc">Status (A-Z)</option>
+                  <option value="status-desc">Status (Z-A)</option>
+                </select>
+                <button
+                  onClick={exportToCSV}
+                  className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
+                >
+                  Export to CSV
+                </button>
+              </div>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="border p-2">Name</th>
+                    <th className="border p-2">Expected Amount</th>
+                    <th className="border p-2">Paid Amount</th>
+                    <th className="border p-2">Status</th>
+                    <th className="border p-2">PDF File</th>
                     <th className="border p-2">Actions</th>
                   </tr>
                 </thead>
@@ -634,6 +740,7 @@
                       <td className="border p-2">RM{student.expectedAmount}</td>
                       <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
                       <td className="border p-2">{student.status}</td>
+                      <td className="border p-2">{student.pdfFilename || "-"}</td>
                       <td className="border p-2 flex gap-2">
                         <button
                           onClick={() => {
