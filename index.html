@@ -493,7 +493,7 @@
                   {filteredStudents.map(student => (
                     <tr key={student.id} className="hover:bg-gray-100">
                       <td className="border p-2">{student.name}</td>
-                      <td className="border p-2">${student.expectedAmount}</td>
+                      <td className="border p-2">RM{student.expectedAmount}</td>
                       <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
                       <td className="border p-2">{student.status}</td>
                       <td className="border p-2 flex gap-2">
