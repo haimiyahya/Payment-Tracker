@@ -49,6 +49,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
@@ -121,6 +122,7 @@
       const [sortBy, setSortBy] = useState("name-asc");
       const [sessionTimeout, setSessionTimeout] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
+      const [isDraggingCSV, setIsDraggingCSV] = useState(false);
 
       // Session management
       useEffect(() => {
@@ -181,7 +183,7 @@
         }
       };
 
-      // Add student
+      // Add single student
       const addStudent = async (e) => {
         e.preventDefault();
         const { name, expectedAmount } = newStudent;
@@ -198,6 +200,106 @@
         const id = await db.students.add(student);
         setStudents(prev => [...prev, { ...student, id }]);
         setNewStudent({ name: "", expectedAmount: "" });
+      };
+
+      // Process CSV file for bulk student upload
+      const processCSV = async (file) => {
+        console.log(`Processing CSV: ${file.name}`);
+        try {
+          const text = await file.text();
+          Papa.parse(text, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (result) => {
+              const data = result.data;
+              const errors = [];
+              const validStudents = [];
+
+              // Validate headers
+              const requiredHeaders = ["Name", "Expected Amount"];
+              const headers = result.meta.fields;
+              if (!requiredHeaders.every(h => headers.includes(h))) {
+                setError("CSV must have 'Name' and 'Expected Amount' columns");
+                return;
+              }
+
+              // Process each row
+              for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                const name = row["Name"]?.trim();
+                const expectedAmount = parseFloat(row["Expected Amount"]);
+
+                if (!name || isNaN(expectedAmount) || expectedAmount <= 0) {
+                  errors.push(`Row ${i + 2}: Invalid name or amount`);
+                  continue;
+                }
+
+                validStudents.push({
+                  name,
+                  expectedAmount: expectedAmount.toFixed(2),
+                  paidAmount: null,
+                  status: "No File Matched"
+                });
+              }
+
+              // Add valid students to database
+              if (validStudents.length > 0) {
+                const ids = await db.students.bulkAdd(validStudents, { allKeys: true });
+                const newStudents = validStudents.map((student, index) => ({
+                  ...student,
+                  id: ids[index]
+                }));
+                setStudents(prev => [...prev, ...newStudents]);
+                console.log(`Added ${newStudents.length} students from CSV`);
+              }
+
+              // Report errors
+              if (errors.length > 0) {
+                setError(`Added ${validStudents.length} students. Errors: ${errors.join("; ")}`);
+              } else {
+                setError(`Successfully added ${validStudents.length} students`);
+              }
+            },
+            error: (err) => {
+              console.error(`Error parsing CSV ${file.name}:`, err);
+              setError(`Failed to parse CSV: ${err.message}`);
+            }
+          });
+        } catch (err) {
+          console.error(`Error processing CSV ${file.name}:`, err);
+          setError(`Failed to process CSV: ${err.message}`);
+        }
+      };
+
+      // Handle CSV file upload
+      const handleCSVUpload = async (files) => {
+        const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".csv"));
+        if (csvFiles.length === 0) {
+          setError("Please upload a valid CSV file");
+          return;
+        }
+        setError("");
+        for (const file of csvFiles) {
+          await processCSV(file);
+        }
+      };
+
+      // CSV drag-and-drop handlers
+      const handleCSVDragOver = (e) => {
+        e.preventDefault();
+        setIsDraggingCSV(true);
+      };
+
+      const handleCSVDragLeave = (e) => {
+        e.preventDefault();
+        setIsDraggingCSV(false);
+      };
+
+      const handleCSVDrop = (e) => {
+        e.preventDefault();
+        setIsDraggingCSV(false);
+        const files = e.dataTransfer.files;
+        handleCSVUpload(files);
       };
 
       // Edit student
@@ -275,21 +377,20 @@
         }
       };
 
-      // Handle file upload (sequential processing)
+      // Handle PDF file upload (sequential processing)
       const handleFileUpload = async (files) => {
         const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf");
         if (pdfFiles.length === 0) {
           setError("Please upload valid PDF files");
           return;
         }
-        setError(""); // Clear previous errors
-        // Process PDFs sequentially
+        setError("");
         for (const file of pdfFiles) {
           await processPDF(file);
         }
       };
 
-      // Drag-and-drop handlers
+      // PDF drag-and-drop handlers
       const handleDragOver = (e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -357,7 +458,7 @@
         if (sortBy === "name-asc") return a.name.localeCompare(b.name);
         if (sortBy === "name-desc") return b.name.localeCompare(a.name);
         if (sortBy === "status-asc") return a.status.localeCompare(b.status);
-        if (sortBy === "status-desc") return b.status.localeCompare(b.status);
+        if (sortBy === "status-desc") return b.status.localeCompare(a.status);
       });
 
       if (!isAuthenticated) {
@@ -393,7 +494,8 @@
             {/* Add Student Form */}
             <div className="bg-white p-6 rounded shadow-md mb-6">
               <h2 className="text-xl font-bold mb-4">Add Student</h2>
-              <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4">
+              {/* Manual Entry Form */}
+              <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4 mb-6">
                 <input
                   type="text"
                   value={newStudent.name}
@@ -406,7 +508,7 @@
                   type="number"
                   value={newStudent.expectedAmount}
                   onChange={(e) => setNewStudent({ ...newStudent, expectedAmount: e.target.value })}
-                  placeholder="Expected Amount"
+                  placeholder="Expected Amount (RM)"
                   step="0.01"
                   min="0"
                   className="p-2 border rounded flex-1"
@@ -416,6 +518,30 @@
                   Add
                 </button>
               </form>
+              {/* CSV Upload */}
+              <div
+                className={`border-2 border-dashed rounded p-6 text-center ${
+                  isDraggingCSV ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                }`}
+                onDragOver={handleCSVDragOver}
+                onDragLeave={handleCSVDragLeave}
+                onDrop={handleCSVDrop}
+              >
+                <p className="mb-4">Drag and drop a CSV file with student names and expected amounts, or click to select</p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => handleCSVUpload(e.target.files)}
+                  className="hidden"
+                  id="csvInput"
+                />
+                <label
+                  htmlFor="csvInput"
+                  className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 cursor-pointer"
+                >
+                  Select CSV File
+                </label>
+              </div>
             </div>
 
             {/* PDF Upload with Drag-and-Drop */}
