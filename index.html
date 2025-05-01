@@ -42,6 +42,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; form-action 'self'" />
   <title>Payment Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
@@ -120,6 +121,7 @@
       const [filter, setFilter] = useState("All");
       const [sortBy, setSortBy] = useState("name-asc");
       const [sessionTimeout, setSessionTimeout] = useState(null);
+      const [isDragging, setIsDragging] = useState(false); // State for drag-and-drop feedback
 
       // Session management
       useEffect(() => {
@@ -158,11 +160,11 @@
       // Handle login
       const handleLogin = async (e) => {
         e.preventDefault();
+        setError("");
         const storedKey = await db.settings.get("passwordKey");
         const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 1000 }).toString();
         
         if (!storedKey) {
-          // Initial setup
           await db.settings.put({ key: "passwordKey", value: derivedKey });
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
@@ -227,7 +229,6 @@
           text += content.items.map(item => item.str).join(" ") + " ";
         }
 
-        // Extract name and amount
         const nameRegex = students.map(s => new RegExp(`\\b${s.name}\\b`, "i"));
         const amountRegex = /\$?\d+\.\d{2}\b|\d+\s*USD\b/i;
         const extractedText = text.toLowerCase();
@@ -242,7 +243,6 @@
         const amountMatch = text.match(amountRegex);
         const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
 
-        // BM25 matching
         let matchedStudent = null;
         if (matchedName) {
           matchedStudent = students.find(s => s.name.toLowerCase() === matchedName.toLowerCase());
@@ -258,7 +258,6 @@
           return;
         }
 
-        // Update student status
         const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
         await db.students.update(matchedStudent.id, { paidAmount: extractedAmount.toFixed(2), status });
         setStudents(students.map(s => 
@@ -266,14 +265,32 @@
         ));
       };
 
-      // Handle file upload
-      const handleFileUpload = (e) => {
-        const files = Array.from(e.target.files).filter(f => f.type === "application/pdf");
-        if (files.length === 0) {
+      // Handle file upload (for both input and drag-and-drop)
+      const handleFileUpload = (files) => {
+        const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf");
+        if (pdfFiles.length === 0) {
           setError("Please upload valid PDF files");
           return;
         }
-        files.forEach(processPDF);
+        pdfFiles.forEach(processPDF);
+      };
+
+      // Drag-and-drop handlers
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      };
+
+      const handleDragLeave = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const files = e.dataTransfer.files;
+        handleFileUpload(files);
       };
 
       // Manually assign receipt
@@ -387,16 +404,33 @@
               </form>
             </div>
 
-            {/* PDF Upload */}
+            {/* PDF Upload with Drag-and-Drop */}
             <div className="bg-white p-6 rounded shadow-md mb-6">
               <h2 className="text-xl font-bold mb-4">Upload Receipts</h2>
-              <input
-                type="file"
-                accept=".pdf"
-                multiple
-                onChange={handleFileUpload}
-                className="p-2 border rounded w-full"
-              />
+              <div
+                className={`border-2 border-dashed rounded p-6 text-center ${
+                  isDragging ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <p className="mb-4">Drag and drop PDF files here or click to select</p>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  multiple
+                  onChange={(e) => handleFileUpload(e.target.files)}
+                  className="hidden"
+                  id="fileInput"
+                />
+                <label
+                  htmlFor="fileInput"
+                  className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 cursor-pointer"
+                >
+                  Select Files
+                </label>
+              </div>
             </div>
 
             {/* Dashboard */}
