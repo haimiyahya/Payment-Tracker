@@ -215,19 +215,31 @@
               const errors = [];
               const validStudents = [];
 
-              // Validate headers
-              const requiredHeaders = ["Name", "Expected Amount"];
-              const headers = result.meta.fields;
-              if (!requiredHeaders.every(h => headers.includes(h))) {
-                setError("CSV must have 'Name' and 'Expected Amount' columns");
+              // Normalize headers: strip quotes, whitespace, BOM, and make case-insensitive
+              const headers = result.meta.fields.map(h => 
+                h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase()
+              );
+              console.log(`Parsed headers: ${JSON.stringify(headers)}`);
+
+              // Expected headers (case-insensitive)
+              const requiredHeaders = ["name", "expected amount"];
+              const nameHeader = headers.find(h => h === "name");
+              const amountHeader = headers.find(h => h === "expected amount");
+
+              if (!nameHeader || !amountHeader) {
+                setError("CSV must have 'Name' and 'Expected Amount' columns (case-insensitive)");
                 return;
               }
+
+              // Find original header names for accessing data
+              const originalNameHeader = result.meta.fields[headers.indexOf("name")];
+              const originalAmountHeader = result.meta.fields[headers.indexOf("expected amount")];
 
               // Process each row
               for (let i = 0; i < data.length; i++) {
                 const row = data[i];
-                const name = row["Name"]?.trim();
-                const expectedAmount = parseFloat(row["Expected Amount"]);
+                const name = row[originalNameHeader]?.trim();
+                const expectedAmount = parseFloat(row[originalAmountHeader]);
 
                 if (!name || isNaN(expectedAmount) || expectedAmount <= 0) {
                   errors.push(`Row ${i + 2}: Invalid name or amount`);
