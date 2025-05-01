@@ -42,6 +42,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; form-action 'self'" />
   <title>Payment Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
@@ -88,7 +89,7 @@
           tokens: BM25.tokenize(doc.name)
         }));
         const docLengths = docTokens.map(dt => dt.tokens.length);
-        const avgDocLength = docLengths.reduce((a, b) => a + b, 0) / docLengths.length;
+        const avgDocLength = docLengths.reduce((a, b) => a + b, 0) / docLengths.length || 1;
         const idf = {};
         tokens.forEach(term => {
           const docsWithTerm = docTokens.filter(dt => dt.tokens.includes(term)).length;
@@ -120,7 +121,7 @@
       const [filter, setFilter] = useState("All");
       const [sortBy, setSortBy] = useState("name-asc");
       const [sessionTimeout, setSessionTimeout] = useState(null);
-      const [isDragging, setIsDragging] = useState(false); // State for drag-and-drop feedback
+      const [isDragging, setIsDragging] = useState(false);
 
       // Session management
       useEffect(() => {
@@ -141,7 +142,7 @@
           setIsAuthenticated(false);
           db.settings.delete("session");
           setError("Session timed out. Please log in again.");
-        }, 30 * 60 * 1000); // 30 minutes
+        }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
       };
 
@@ -196,7 +197,7 @@
           status: "No File Matched"
         };
         const id = await db.students.add(student);
-        setStudents([...students, { ...student, id }]);
+        setStudents(prev => [...prev, { ...student, id }]);
         setNewStudent({ name: "", expectedAmount: "" });
       };
 
@@ -208,70 +209,85 @@
         }
         updatedStudent.expectedAmount = parseFloat(updatedStudent.expectedAmount).toFixed(2);
         await db.students.update(id, updatedStudent);
-        setStudents(students.map(s => (s.id === id ? { ...s, ...updatedStudent } : s)));
+        setStudents(prev => prev.map(s => (s.id === id ? { ...s, ...updatedStudent } : s)));
       };
 
       // Delete student
       const deleteStudent = async (id) => {
         await db.students.delete(id);
-        setStudents(students.filter(s => s.id !== id));
+        setStudents(prev => prev.filter(s => s.id !== id));
       };
 
       // Process PDF
       const processPDF = async (file) => {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let text = "";
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          text += content.items.map(item => item.str).join(" ") + " ";
-        }
-
-        const nameRegex = students.map(s => new RegExp(`\\b${s.name}\\b`, "i"));
-        const amountRegex = /\$?\d+\.\d{2}\b|\d+\s*USD\b/i;
-        const extractedText = text.toLowerCase();
-        let matchedName = null;
-        for (const regex of nameRegex) {
-          const match = text.match(regex);
-          if (match) {
-            matchedName = students.find(s => regex.test(s.name))?.name;
-            break;
+        console.log(`Processing PDF: ${file.name}`);
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          let text = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            text += content.items.map(item => item.str).join(" ") + " ";
           }
-        }
-        const amountMatch = text.match(amountRegex);
-        const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
+          console.log(`Extracted text from ${file.name}: ${text.slice(0, 100)}...`);
 
-        let matchedStudent = null;
-        if (matchedName) {
-          matchedStudent = students.find(s => s.name.toLowerCase() === matchedName.toLowerCase());
-        } else {
-          const filename = file.name.replace(".pdf", "");
-          matchedStudent = BM25.match(filename, students);
-        }
+          const nameRegex = students.map(s => new RegExp(`\\b${s.name}\\b`, "i"));
+          const amountRegex = /\$?\d+\.\d{2}\b|\d+\s*USD\b/i;
+          const extractedText = text.toLowerCase();
+          let matchedName = null;
+          for (const regex of nameRegex) {
+            const match = text.match(regex);
+            if (match) {
+              matchedName = students.find(s => regex.test(s.name))?.name;
+              break;
+            }
+          }
+          const amountMatch = text.match(amountRegex);
+          const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
+          console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}`);
 
-        if (!matchedStudent || !extractedAmount) {
-          const reason = !matchedStudent ? "No name found" : "No amount found";
-          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text });
-          setInvalidReceipts([...invalidReceipts, { id, filename: file.name, reason, data: text }]);
-          return;
-        }
+          let matchedStudent = null;
+          if (matchedName) {
+            matchedStudent = students.find(s => s.name.toLowerCase() === matchedName.toLowerCase());
+          } else {
+            const filename = file.name.replace(".pdf", "");
+            matchedStudent = BM25.match(filename, students);
+            console.log(`BM25 match for ${filename}: ${matchedStudent ? matchedStudent.name : 'None'}`);
+          }
 
-        const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
-        await db.students.update(matchedStudent.id, { paidAmount: extractedAmount.toFixed(2), status });
-        setStudents(students.map(s => 
-          s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), status } : s
-        ));
+          if (!matchedStudent || !extractedAmount) {
+            const reason = !matchedStudent ? "No name found" : "No amount found";
+            console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
+            const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text });
+            setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text }]);
+            return;
+          }
+
+          const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
+          console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}`);
+          await db.students.update(matchedStudent.id, { paidAmount: extractedAmount.toFixed(2), status });
+          setStudents(prev => prev.map(s => 
+            s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), status } : s
+          ));
+        } catch (err) {
+          console.error(`Error processing ${file.name}:`, err);
+          setError(`Failed to process ${file.name}: ${err.message}`);
+        }
       };
 
-      // Handle file upload (for both input and drag-and-drop)
-      const handleFileUpload = (files) => {
+      // Handle file upload (sequential processing)
+      const handleFileUpload = async (files) => {
         const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf");
         if (pdfFiles.length === 0) {
           setError("Please upload valid PDF files");
           return;
         }
-        pdfFiles.forEach(processPDF);
+        setError(""); // Clear previous errors
+        // Process PDFs sequentially
+        for (const file of pdfFiles) {
+          await processPDF(file);
+        }
       };
 
       // Drag-and-drop handlers
@@ -302,16 +318,16 @@
         const status = parseFloat(amount).toFixed(2) === student.expectedAmount ? "Paid" : "Incorrect";
         await db.students.update(student.id, { paidAmount: parseFloat(amount).toFixed(2), status });
         await db.invalidReceipts.delete(receiptId);
-        setStudents(students.map(s => 
+        setStudents(prev => prev.map(s => 
           s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), status } : s
         ));
-        setInvalidReceipts(invalidReceipts.filter(r => r.id !== receiptId));
+        setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
       };
 
       // Delete payment
       const deletePayment = async (id) => {
         await db.students.update(id, { paidAmount: null, status: "No File Matched" });
-        setStudents(students.map(s => 
+        setStudents(prev => prev.map(s => 
           s.id === id ? { ...s, paidAmount: null, status: "No File Matched" } : s
         ));
       };
@@ -342,7 +358,7 @@
         if (sortBy === "name-asc") return a.name.localeCompare(b.name);
         if (sortBy === "name-desc") return b.name.localeCompare(a.name);
         if (sortBy === "status-asc") return a.status.localeCompare(b.status);
-        if (sortBy === "status-desc") return b.status.localeCompare(a.status);
+        if (sortBy === "status-desc") return b.status.localeCompare(b.status);
       });
 
       if (!isAuthenticated) {
