@@ -133,29 +133,6 @@
       const [isDragging, setIsDragging] = useState(false);
       const [isDraggingCSV, setIsDraggingCSV] = useState(false);
 
-      // Session management
-      useEffect(() => {
-        const checkSession = async () => {
-          const session = await db.settings.get("session");
-          if (session && session.value > Date.now()) {
-            setIsAuthenticated(true);
-            resetSessionTimeout();
-          }
-        };
-        checkSession();
-        return () => clearTimeout(sessionTimeout);
-      }, []);
-
-      const resetSessionTimeout = () => {
-        clearTimeout(sessionTimeout);
-        const timeout = setTimeout(() => {
-          setIsAuthenticated(false);
-          db.settings.delete("session");
-          setError("Session timed out. Please log in again.");
-        }, 30 * 60 * 1000);
-        setSessionTimeout(timeout);
-      };
-
       // Load data from IndexedDB
       const loadData = async () => {
         const studentsData = await db.students.toArray();
@@ -169,6 +146,34 @@
         setInvalidReceipts(invalidData);
       };
 
+      // Session management
+      useEffect(() => {
+        const checkSession = async () => {
+          const session = await db.settings.get("session");
+          if (session && session.value > Date.now()) {
+            setIsAuthenticated(true);
+            await loadData(); // Load data on successful session check
+            resetSessionTimeout();
+          } else {
+            setIsAuthenticated(false);
+          }
+        };
+        checkSession();
+        return () => clearTimeout(sessionTimeout);
+      }, []);
+
+      const resetSessionTimeout = () => {
+        clearTimeout(sessionTimeout);
+        const timeout = setTimeout(async () => {
+          setIsAuthenticated(false);
+          await db.settings.delete("session");
+          setError("Session timed out. Please log in again.");
+          setStudents([]);
+          setInvalidReceipts([]);
+        }, 30 * 60 * 1000);
+        setSessionTimeout(timeout);
+      };
+
       // Handle login
       const handleLogin = async (e) => {
         e.preventDefault();
@@ -180,15 +185,15 @@
           await db.settings.put({ key: "passwordKey", value: derivedKey });
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
+          await loadData(); // Load data after successful login
           resetSessionTimeout();
           setPassword("");
-          loadData();
         } else if (storedKey.value === derivedKey) {
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
+          await loadData(); // Load data after successful login
           resetSessionTimeout();
           setPassword("");
-          loadData();
         } else {
           setError("Incorrect password");
         }
@@ -201,6 +206,8 @@
         setIsAuthenticated(false);
         setError("");
         setPdfError("");
+        setStudents([]); // Clear students on logout
+        setInvalidReceipts([]); // Clear invalid receipts on logout
       };
 
       // Add single student
