@@ -130,51 +130,35 @@
       // Extract key information using regex
       const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
       const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
-      // Refined name regex to match proper names more accurately
-      const nameRegex = /(?:Tenaga Nasional|Malayan Banking|Maybank Islamic|TNB Rumah Sendayan)\b/gi;
-      // List of phrases to exclude from names
-      const excludePhrases = [
-        "BILLPAYMENT", "TRANSACTION DATE", "FROM ACCOUNT", "BILL ACCOUNT",
-        "REGISTERED", "STATUS", "REFERENCE NUMBER", "AMOUNT", "FROM",
-        "CORPORATION NAME", "NICKNAME", "PAYEE CODE", "SUCCESSFUL",
-        "NOTE", "RECEIPT", "COMPUTER GENERATED", "NO SIGNATURE",
-        "REQUIRED", "MAYBANK2U", "CO REG"
-      ];
+      const refNumberRegex = /\b\d{10}\b/;
+      const otherDetailsRegex = /\bYURAN\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4}\b/;
 
       const amountMatch = cleaned.match(amountRegex);
       const dateMatch = cleaned.match(dateRegex);
-      let nameMatches = cleaned.match(nameRegex) || [];
-      // Filter out excluded phrases from name matches
-      nameMatches = nameMatches.filter(name => 
-        !excludePhrases.some(exclude => name.toUpperCase().includes(exclude))
-      );
+      const refNumberMatch = cleaned.match(refNumberRegex);
+      const otherDetailsMatch = cleaned.match(otherDetailsRegex);
 
       // Prioritize key information
       let prioritizedText = "";
-      if (amountMatch) {
-        prioritizedText += `**Amount:** ${amountMatch[0]}\n`;
-      }
       if (dateMatch) {
-        prioritizedText += `**Date:** ${dateMatch[0]}\n`;
+        prioritizedText += `Date: ${dateMatch[0]}\n`;
       }
-      if (nameMatches && nameMatches.length > 0) {
-        prioritizedText += `**Names:** ${[...new Set(nameMatches)].join(", ")}\n`;
+      if (amountMatch) {
+        prioritizedText += `Amount: ${amountMatch[0]}\n`;
+      }
+      if (refNumberMatch) {
+        prioritizedText += `Reference Number: ${refNumberMatch[0]}\n`;
+      }
+      if (otherDetailsMatch) {
+        prioritizedText += `Other Transfer Details: ${otherDetailsMatch[0]}\n`;
       }
 
-      // Remove extracted matches from the remaining text
+      // Add the rest of the text, excluding already included parts
       let remainingText = cleaned;
-      if (amountMatch) {
-        remainingText = remainingText.replace(amountMatch[0], "").replace(/\s+/g, " ").trim();
-      }
-      if (dateMatch) {
-        remainingText = remainingText.replace(dateMatch[0], "").replace(/\s+/g, " ").trim();
-      }
-      if (nameMatches) {
-        nameMatches.forEach(name => {
-          const regex = new RegExp(`\\b${name}\\b`, "gi");
-          remainingText = remainingText.replace(regex, "").replace(/\s+/g, " ").trim();
-        });
-      }
+      if (amountMatch) remainingText = remainingText.replace(amountMatch[0], "").replace(/\s+/g, " ").trim();
+      if (dateMatch) remainingText = remainingText.replace(dateMatch[0], "").replace(/\s+/g, " ").trim();
+      if (refNumberMatch) remainingText = remainingText.replace(refNumberMatch[0], "").replace(/\s+/g, " ").trim();
+      if (otherDetailsMatch) remainingText = remainingText.replace(otherDetailsMatch[0], "").replace(/\s+/g, " ").trim();
 
       prioritizedText += remainingText;
 
@@ -250,7 +234,7 @@
         const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 1000 }).toString();
         
         if (!storedKey) {
-          await db.settings.put({ key: "passwordKey", value: derived illustratorKey });
+          await db.settings.put({ key: "passwordKey", value: derivedKey });
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
           await loadData(); // Load data after successful login
@@ -880,18 +864,7 @@
                       <tr key={receipt.id} className="hover:bg-gray-100">
                         <td className="border p-2">{receipt.filename}</td>
                         <td className="border p-2">
-                          <div className="text-sm text-gray-700 whitespace-pre-wrap" style={{ maxWidth: "400px" }}>
-                            {formatPDFText(receipt.data).split('\n').map((line, index) => (
-                              <span key={index}>
-                                {line.startsWith('**') ? (
-                                  <strong>{line.replace(/\*\*/g, '')}</strong>
-                                ) : (
-                                  line
-                                )}
-                                <br />
-                              </span>
-                            ))}
-                          </div>
+                          <div className="text-sm text-gray-700 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
                         </td>
                         <td className="border p-2">{receipt.reason}</td>
                         <td className="border p-2 flex gap-2">
