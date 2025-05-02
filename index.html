@@ -351,6 +351,7 @@
       // Process PDF
       const processPDF = async (file) => {
         console.log(`Processing PDF: ${file.name}`);
+        let text = "";
         try {
           // Validate PDF magic number
           const isValidPDF = await validatePDFFile(file);
@@ -360,7 +361,6 @@
 
           const arrayBuffer = await file.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          let text = "";
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
@@ -386,6 +386,7 @@
           let matchedStudent = null;
           if (matchedName) {
             matchedStudent = students.find(s => s.name.toLowerCase() === matchedName.toLowerCase());
+            console.log(`Matched by name: ${matchedStudent ? matchedStudent.name : 'None'}`);
           } else {
             const filename = file.name.replace(".pdf", "");
             matchedStudent = BM25.match(filename, students);
@@ -393,10 +394,14 @@
           }
 
           if (!matchedStudent || !extractedAmount) {
-            const reason = !matchedStudent ? "No name found" : "No amount found";
+            let reason = "No student matched";
+            if (matchedStudent && !extractedAmount) {
+              reason = "No amount found in PDF";
+            }
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
             const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
             setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
+            setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
 
@@ -421,10 +426,10 @@
             userFriendlyMessage = "The PDF structure is invalid. Please upload a different file.";
           }
           
-          // Log to Invalid Receipts even if PDF can't be processed
           const reason = `Failed to process: ${userFriendlyMessage}`;
-          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: "Unable to extract text" });
-          setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: "Unable to extract text" }]);
+          console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
+          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
+          setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
           
           setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
         }
@@ -528,7 +533,7 @@
               {error && <p className="text-red-500 mb-4">{error}</p>}
               <form onSubmit={handleLogin}>
                 <input
-                  type="text"
+                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
