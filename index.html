@@ -425,6 +425,13 @@
             if (matchedStudent && !extractedAmount) {
               reason = "No amount found in PDF";
             }
+            // Check for duplicate receipt
+            const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
+            if (existingReceipt) {
+              console.log(`Duplicate receipt detected: ${file.name}`);
+              setPdfError(`Duplicate receipt detected: ${file.name}. Skipping.`);
+              return;
+            }
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
             const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
             setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
@@ -455,6 +462,13 @@
           }
           
           const reason = `Failed to process: ${userFriendlyMessage}`;
+          // Check for duplicate receipt
+          const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
+          if (existingReceipt) {
+            console.log(`Duplicate receipt detected: ${file.name}`);
+            setPdfError(`Duplicate receipt detected: ${file.name}. Skipping.`);
+            return;
+          }
           console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
           const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
           setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
@@ -522,6 +536,12 @@
         setStudents(prev => prev.map(s => 
           s.id === id ? { ...s, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : s
         ));
+      };
+
+      // Delete invalid receipt
+      const deleteInvalidReceipt = async (id) => {
+        await db.invalidReceipts.delete(id);
+        setInvalidReceipts(prev => prev.filter(r => r.id !== id));
       };
 
       // Export to CSV
@@ -776,6 +796,7 @@
                       <th className="border p-2">Filename</th>
                       <th className="border p-2">Reason</th>
                       <th className="border p-2">Assign</th>
+                      <th className="border p-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -798,6 +819,14 @@
                               <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                           </select>
+                        </td>
+                        <td className="border p-2">
+                          <button
+                            onClick={() => deleteInvalidReceipt(receipt.id)}
+                            className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))}
