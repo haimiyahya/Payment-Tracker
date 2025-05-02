@@ -82,12 +82,15 @@
         return score;
       },
       match: (query, documents) => {
+        console.log(`BM25.match: Query=${query}, Documents=${JSON.stringify(documents.map(d => ({ id: d.id, name: d.name })))}`);
         const tokens = BM25.tokenize(query);
+        console.log(`BM25.match: Query tokens=${tokens}`);
         const docTokens = documents.map(doc => ({
           id: doc.id,
           name: doc.name,
           tokens: BM25.tokenize(doc.name)
         }));
+        console.log(`BM25.match: Doc tokens=${JSON.stringify(docTokens.map(dt => ({ id: dt.id, name: dt.name, tokens: dt.tokens })))}`);
         const docLengths = docTokens.map(dt => dt.tokens.length);
         const avgDocLength = docLengths.reduce((a, b) => a + b, 0) / docLengths.length || 1;
         const idf = {};
@@ -97,15 +100,20 @@
         });
         const scores = docTokens.map(dt => ({
           id: dt.id,
-          name: doc.name,
+          name: dt.name, // Fixed: Changed doc.name to dt.name
           score: BM25.computeScore(tokens, dt.tokens, dt.tokens.length, avgDocLength, idf)
         }));
+        console.log(`BM25.match: Scores=${JSON.stringify(scores)}`);
         const sorted = scores.sort((a, b) => b.score - a.score);
-        if (sorted[0].score > BM25.threshold) {
+        if (sorted[0] && sorted[0].score > BM25.threshold) {
           const topScore = sorted[0].score;
           const closeScores = sorted.filter(s => s.score >= topScore * 0.9);
-          if (closeScores.length === 1) return sorted[0];
+          if (closeScores.length === 1) {
+            console.log(`BM25.match: Returning match=${JSON.stringify(sorted[0])}`);
+            return sorted[0];
+          }
         }
+        console.log(`BM25.match: No match found`);
         return null;
       }
     };
