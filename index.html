@@ -118,18 +118,51 @@
       }
     };
 
-    // Function to clean and format PDF text
+    // Function to clean and prioritize PDF text
     const formatPDFText = (text) => {
       if (!text || typeof text !== "string") return "No text available";
+
       // Remove non-printable characters (ASCII < 32, except for space)
       let cleaned = text.replace(/[\x00-\x1F\x7F]+/g, " ");
       // Replace multiple spaces with a single space
       cleaned = cleaned.replace(/\s+/g, " ").trim();
-      // Truncate to 200 characters for display
-      if (cleaned.length > 200) {
-        cleaned = cleaned.substring(0, 200) + "...";
+
+      // Extract key information using regex
+      const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
+      const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+      const nameRegex = /\b[A-Z][a-z]+ [A-Z][a-z]+\b|\b[A-Z]+ [A-Z]+\b/g; // Simple name pattern (e.g., "Tenaga Nasional")
+
+      const amountMatch = cleaned.match(amountRegex);
+      const dateMatch = cleaned.match(dateRegex);
+      const nameMatches = cleaned.match(nameRegex);
+
+      // Prioritize key information
+      let prioritizedText = "";
+      if (amountMatch) {
+        prioritizedText += `Amount: ${amountMatch[0]}\n`;
       }
-      return cleaned || "No text available";
+      if (dateMatch) {
+        prioritizedText += `Date: ${dateMatch[0]}\n`;
+      }
+      if (nameMatches) {
+        prioritizedText += `Names: ${nameMatches.join(", ")}\n`;
+      }
+
+      // Add the rest of the text, excluding already included parts
+      let remainingText = cleaned;
+      if (amountMatch) remainingText = remainingText.replace(amountMatch[0], "");
+      if (dateMatch) remainingText = remainingText.replace(dateMatch[0], "");
+      if (nameMatches) nameMatches.forEach(name => (remainingText = remainingText.replace(name, "")));
+      remainingText = remainingText.replace(/\s+/g, " ").trim();
+
+      prioritizedText += remainingText;
+
+      // Truncate to 500 characters for display
+      if (prioritizedText.length > 500) {
+        prioritizedText = prioritizedText.substring(0, 500) + "...";
+      }
+
+      return prioritizedText || "No text available";
     };
 
     // Main App Component
@@ -826,7 +859,7 @@
                       <tr key={receipt.id} className="hover:bg-gray-100">
                         <td className="border p-2">{receipt.filename}</td>
                         <td className="border p-2">
-                          <div className="text-sm text-gray-700 break-words">{formatPDFText(receipt.data)}</div>
+                          <div className="text-sm text-gray-700 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
                         </td>
                         <td className="border p-2">{receipt.reason}</td>
                         <td className="border p-2 flex gap-2">
