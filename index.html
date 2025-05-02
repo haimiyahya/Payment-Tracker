@@ -118,6 +118,20 @@
       }
     };
 
+    // Function to clean and format PDF text
+    const formatPDFText = (text) => {
+      if (!text || typeof text !== "string") return "No text available";
+      // Remove non-printable characters (ASCII < 32, except for space)
+      let cleaned = text.replace(/[\x00-\x1F\x7F]+/g, " ");
+      // Replace multiple spaces with a single space
+      cleaned = cleaned.replace(/\s+/g, " ").trim();
+      // Truncate to 200 characters for display
+      if (cleaned.length > 200) {
+        cleaned = cleaned.substring(0, 200) + "...";
+      }
+      return cleaned || "No text available";
+    };
+
     // Main App Component
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -801,6 +815,7 @@
                   <thead>
                     <tr className="bg-gray-200">
                       <th className="border p-2">Filename</th>
+                      <th className="border p-2">PDF Content</th>
                       <th className="border p-2">Reason</th>
                       <th className="border p-2">Assign</th>
                       <th className="border p-2">Actions</th>
@@ -810,6 +825,9 @@
                     {invalidReceipts.map(receipt => (
                       <tr key={receipt.id} className="hover:bg-gray-100">
                         <td className="border p-2">{receipt.filename}</td>
+                        <td className="border p-2">
+                          <div className="text-sm text-gray-700 break-words">{formatPDFText(receipt.data)}</div>
+                        </td>
                         <td className="border p-2">{receipt.reason}</td>
                         <td className="border p-2 flex gap-2">
                           <select
