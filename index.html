@@ -60,7 +60,7 @@
     // Initialize Dexie.js for IndexedDB
     const db = new Dexie("PaymentTrackerDB");
     db.version(1).stores({
-      students: "++id,name,expectedAmount,paidAmount,status,pdfFilename",
+      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename",
       invalidReceipts: "++id,filename,reason,data",
       settings: "key,value"
     });
@@ -100,7 +100,7 @@
         });
         const scores = docTokens.map(dt => ({
           id: dt.id,
-          name: dt.name, // Fixed: Changed doc.name to dt.name
+          name: dt.name,
           score: BM25.computeScore(tokens, dt.tokens, dt.tokens.length, avgDocLength, idf)
         }));
         console.log(`BM25.match: Scores=${JSON.stringify(scores)}`);
@@ -163,7 +163,8 @@
         setStudents(studentsData.map(s => ({
           ...s,
           status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-          pdfFilename: s.pdfFilename || null
+          pdfFilename: s.pdfFilename || null,
+          transactionDate: s.transactionDate || null
         })));
         setInvalidReceipts(invalidData);
       };
@@ -205,6 +206,7 @@
           name: name.trim(),
           expectedAmount: parseFloat(expectedAmount).toFixed(2),
           paidAmount: null,
+          transactionDate: null,
           status: "No File Matched",
           pdfFilename: null
         };
@@ -261,6 +263,7 @@
                   name,
                   expectedAmount: expectedAmount.toFixed(2),
                   paidAmount: null,
+                  transactionDate: null,
                   status: "No File Matched",
                   pdfFilename: null
                 });
@@ -378,6 +381,7 @@
 
           const nameRegex = students.map(s => new RegExp(`\\b${s.name}\\b`, "i"));
           const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
+          const dateRegex = /\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/;
           const extractedText = text.toLowerCase();
           let matchedName = null;
           for (const regex of nameRegex) {
@@ -389,7 +393,13 @@
           }
           const amountMatch = text.match(amountRegex);
           const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
-          console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}`);
+          let transactionDate = null;
+          const dateMatch = text.match(dateRegex);
+          if (dateMatch) {
+            transactionDate = dateMatch[0]; // Use the first matching date string
+            console.log(`Extracted transaction date from ${file.name}: ${transactionDate}`);
+          }
+          console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}, Date=${transactionDate}`);
 
           let matchedStudent = null;
           if (matchedName) {
@@ -414,14 +424,15 @@
           }
 
           const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
-          console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}, PDF=${file.name}`);
+          console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}, Date=${transactionDate}, PDF=${file.name}`);
           await db.students.update(matchedStudent.id, { 
             paidAmount: extractedAmount.toFixed(2), 
+            transactionDate: transactionDate,
             status, 
             pdfFilename: file.name 
           });
           setStudents(prev => prev.map(s => 
-            s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), status, pdfFilename: file.name } : s
+            s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : s
           ));
         } catch (err) {
           console.error(`Error processing ${file.name}:`, err);
@@ -485,31 +496,33 @@
         const status = parseFloat(amount).toFixed(2) === student.expectedAmount ? "Paid" : "Incorrect";
         await db.students.update(student.id, { 
           paidAmount: parseFloat(amount).toFixed(2), 
+          transactionDate: null, // No date extracted during manual assignment
           status, 
           pdfFilename: receipt.filename 
         });
         await db.invalidReceipts.delete(receiptId);
         setStudents(prev => prev.map(s => 
-          s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), status, pdfFilename: receipt.filename } : s
+          s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), transactionDate: null, status, pdfFilename: receipt.filename } : s
         ));
         setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
       };
 
       // Delete payment
       const deletePayment = async (id) => {
-        await db.students.update(id, { paidAmount: null, status: "No File Matched", pdfFilename: null });
+        await db.students.update(id, { paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null });
         setStudents(prev => prev.map(s => 
-          s.id === id ? { ...s, paidAmount: null, status: "No File Matched", pdfFilename: null } : s
+          s.id === id ? { ...s, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : s
         ));
       };
 
       // Export to CSV
       const exportToCSV = () => {
-        const headers = ["Name", "Expected Amount", "Paid Amount", "Status", "PDF File"];
+        const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
         const rows = students.map(s => [
           s.name,
           s.expectedAmount,
           s.paidAmount || "",
+          s.transactionDate || "",
           s.status,
           s.pdfFilename || ""
         ]);
@@ -684,6 +697,7 @@
                     <th className="border p-2">Name</th>
                     <th className="border p-2">Expected Amount</th>
                     <th className="border p-2">Paid Amount</th>
+                    <th className="border p-2">Transaction Date</th>
                     <th className="border p-2">Status</th>
                     <th className="border p-2">PDF File</th>
                     <th className="border p-2">Actions</th>
@@ -695,6 +709,7 @@
                       <td className="border p-2">{student.name}</td>
                       <td className="border p-2">RM{student.expectedAmount}</td>
                       <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
+                      <td className="border p-2">{student.transactionDate || "-"}</td>
                       <td className="border p-2">{student.status}</td>
                       <td className="border p-2">{student.pdfFilename || "-"}</td>
                       <td className="border p-2 flex gap-2">
