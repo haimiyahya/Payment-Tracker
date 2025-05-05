@@ -930,3 +930,139 @@
                   <option value="status-asc">Status (A-Z)</option>
                   <option value="status-desc">Status (Z-A)</option>
                 </select>
+                <button
+                  onClick={exportToCSV}
+                  className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
+                >
+                  Export to CSV
+                </button>
+              </div>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="border p-2">Name</th>
+                    <th className="border p-2">Expected Amount</th>
+                    <th className="border p-2">Paid Amount</th>
+                    <th className="border p-2">Transaction Date</th>
+                    <th className="border p-2">Status</th>
+                    <th className="border p-2">PDF File</th>
+                    <th className="border p-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStudents.map(student => (
+                    <tr 
+                      key={student.id} 
+                      className={
+                        student.status === "Paid" 
+                          ? "bg-green-100 hover:bg-green-200" 
+                          : student.status === "Incorrect" 
+                          ? "bg-orange-100 hover:bg-orange-200" 
+                          : "bg-gray-100 hover:bg-gray-200"
+                      }
+                    >
+                      <td className="border p-2">{student.name}</td>
+                      <td className="border p-2">RM{student.expectedAmount}</td>
+                      <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
+                      <td className="border p-2">{student.transactionDate || "-"}</td>
+                      <td className="border p-2">{student.status}</td>
+                      <td className="border p-2">{student.pdfFilename || "-"}</td>
+                      <td className="border p-2 flex gap-2">
+                        <button
+                          onClick={() => {
+                            const newName = prompt("Enter new name", student.name);
+                            const newAmount = prompt("Enter new expected amount", student.expectedAmount);
+                            if (newName && newAmount) {
+                              editStudent(student.id, {
+                                name: newName,
+                                expectedAmount: newAmount
+                              });
+                            }
+                          }}
+                          className="bg-yellow-300 text-white p-1 rounded-md shadow-sm hover:bg-yellow-400 hover:bg-opacity-80 transition-colors duration-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteStudent(student.id)}
+                          className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                        >
+                          Delete
+                        </button>
+                        {student.paidAmount && (
+                          <button
+                            onClick={() => deletePayment(student.id)}
+                            className="bg-gray-400 text-white p-1 rounded-md shadow-sm hover:bg-gray-500 hover:bg-opacity-80 transition-colors duration-200"
+                          >
+                            Clear Payment
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Invalid Receipts */}
+            {invalidReceipts.length > 0 && (
+              <div className="bg-white p-6 rounded shadow-md">
+                <h2 className="text-xl font-bold mb-4">Invalid Receipts</h2>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-200">
+                      <th className="border p-2">Filename</th>
+                      <th className="border p-2">PDF Content</th>
+                      <th className="border p-2">Reason</th>
+                      <th className="border p-2">Assign</th>
+                      <th className="border p-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invalidReceipts.map(receipt => (
+                      <tr key={receipt.id} className="hover:bg-gray-100">
+                        <td className="border p-2">{receipt.filename}</td>
+                        <td className="border p-2">
+                          <div className="text-sm text-gray-700 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
+                        </td>
+                        <td className="border p-2">{receipt.reason}</td>
+                        <td className="border p-2 flex gap-2">
+                          <select
+                            className="p-1 border rounded"
+                            onChange={(e) => {
+                              const amount = prompt("Enter amount");
+                              if (amount) {
+                                assignReceipt(receipt.id, e.target.value, amount);
+                              }
+                            }}
+                          >
+                            <option value="">Select Student</option>
+                            {students.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="border p-2">
+                          <button
+                            onClick={() => deleteInvalidReceipt(receipt.id)}
+                            className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Render the app
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
