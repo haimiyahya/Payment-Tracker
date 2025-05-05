@@ -59,9 +59,9 @@
 
     // Initialize Dexie.js for IndexedDB
     const db = new Dexie("PaymentTrackerDB");
-    db.version(2).stores({
+    db.version(3).stores({
       students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
-      invalidReceipts: "++id,filename,reason,data",
+      invalidReceipts: "++id,filename,reason,data,sessionId",
       settings: "key,value",
       paymentSessions: "++id,name"
     });
@@ -185,8 +185,6 @@
 
       // Load data from IndexedDB
       const loadData = async () => {
-        const invalidData = await db.invalidReceipts.toArray();
-        setInvalidReceipts(invalidData);
         const sessionsData = await db.paymentSessions.toArray();
         setSessions(sessionsData);
         // Load the last session if it exists
@@ -194,12 +192,14 @@
           const lastSession = sessionsData[sessionsData.length - 1];
           setCurrentSession(lastSession);
           const studentsData = await db.students.where("sessionId").equals(lastSession.id).toArray();
+          const invalidData = await db.invalidReceipts.where("sessionId").equals(lastSession.id).toArray();
           setStudents(studentsData.map(s => ({
             ...s,
             status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
             pdfFilename: s.pdfFilename || null,
             transactionDate: s.transactionDate || null
           })));
+          setInvalidReceipts(invalidData);
         }
       };
 
@@ -283,6 +283,7 @@
         setSessions(prev => [...prev, newSession]);
         setCurrentSession(newSession);
         setStudents([]);
+        setInvalidReceipts([]);
         setNewSessionName("");
         setError("");
       };
@@ -310,12 +311,14 @@
         }
         setCurrentSession(session);
         const studentsData = await db.students.where("sessionId").equals(session.id).toArray();
+        const invalidData = await db.invalidReceipts.where("sessionId").equals(session.id).toArray();
         setStudents(studentsData.map(s => ({
           ...s,
           status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
           pdfFilename: s.pdfFilename || null,
           transactionDate: s.transactionDate || null
         })));
+        setInvalidReceipts(invalidData);
         setError("");
       };
 
@@ -543,7 +546,7 @@
             console.log(`BM25 match for ${filename}: ${matchedStudent ? matchedStudent.name : 'None'}`);
           }
 
-          const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
+          const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
             console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
             await db.invalidReceipts.delete(existingReceipt.id);
@@ -563,8 +566,19 @@
               reason = "No amount found in PDF";
             }
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
-            const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
-            setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
+            const id = await db.invalidReceipts.add({ 
+              filename: file.name, 
+              reason, 
+              data: text || "Unable to extract text",
+              sessionId: currentSession.id 
+            });
+            setInvalidReceipts(prev => [...prev, { 
+              id, 
+              filename: file.name, 
+              reason, 
+              data: text || "Unable to extract text",
+              sessionId: currentSession.id 
+            }]);
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
@@ -592,15 +606,26 @@
           }
           
           const reason = `Failed to process: ${userFriendlyMessage}`;
-          const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
+          const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
             console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
             await db.invalidReceipts.delete(existingReceipt.id);
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
           console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
-          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
-          setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text" }]);
+          const id = await db.invalidReceipts.add({ 
+            filename: file.name, 
+            reason, 
+            data: text || "Unable to extract text",
+            sessionId: currentSession.id 
+          });
+          setInvalidReceipts(prev => [...prev, { 
+            id, 
+            filename: file.name, 
+            reason, 
+            data: text || "Unable to extract text",
+            sessionId: currentSession.id 
+          }]);
           
           setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
         }
