@@ -64,7 +64,7 @@
       invalidReceipts: "++id,filename,reason,data,sessionId",
       settings: "key,value",
       paymentSessions: "++id,name",
-      deletedSessions: "++id,name,students,invalidReceipts" // New table for deleted sessions
+      deletedSessions: "++id,name,students,invalidReceipts"
     });
 
     // Simplified BM25 implementation
@@ -184,7 +184,7 @@
       const [currentSession, setCurrentSession] = useState(null);
       const [newSessionName, setNewSessionName] = useState("");
       const [isLoading, setIsLoading] = useState(false);
-      const [deletedSessions, setDeletedSessions] = useState([]); // State for deleted sessions
+      const [deletedSessions, setDeletedSessions] = useState([]);
 
       // Load data from IndexedDB
       const loadData = async () => {
@@ -192,7 +192,6 @@
         setSessions(sessionsData);
         const deletedSessionsData = await db.deletedSessions.toArray();
         setDeletedSessions(deletedSessionsData);
-        // Load the last session if it exists
         if (sessionsData.length > 0) {
           const lastSession = sessionsData[sessionsData.length - 1];
           setCurrentSession(lastSession);
@@ -208,7 +207,6 @@
         }
       };
 
-      // Session management
       useEffect(() => {
         const checkSession = async () => {
           const session = await db.settings.get("session");
@@ -239,7 +237,6 @@
         setSessionTimeout(timeout);
       };
 
-      // Handle login
       const handleLogin = async (e) => {
         e.preventDefault();
         setError("");
@@ -264,7 +261,6 @@
         }
       };
 
-      // Handle logout
       const handleLogout = async () => {
         await db.settings.delete("session");
         clearTimeout(sessionTimeout);
@@ -278,7 +274,6 @@
         setCurrentSession(null);
       };
 
-      // Create a new session
       const createNewSession = async () => {
         if (!newSessionName.trim()) {
           setError("Please enter a session name");
@@ -300,7 +295,6 @@
         }, 500);
       };
 
-      // Open an existing session
       const openSession = async (sessionId) => {
         const session = sessions.find(s => s.id === parseInt(sessionId));
         if (!session) {
@@ -325,7 +319,6 @@
         }, 500);
       };
 
-      // Delete a session and move to trash bin
       const deleteSession = async () => {
         if (!currentSession) {
           setError("No session selected to delete");
@@ -334,21 +327,17 @@
         setIsLoading(true);
         setTimeout(async () => {
           const sessionId = currentSession.id;
-          // Fetch associated data
           const sessionStudents = await db.students.where("sessionId").equals(sessionId).toArray();
           const sessionInvalidReceipts = await db.invalidReceipts.where("sessionId").equals(sessionId).toArray();
-          // Move to deletedSessions table
           await db.deletedSessions.add({
             id: sessionId,
             name: currentSession.name,
             students: sessionStudents,
             invalidReceipts: sessionInvalidReceipts
           });
-          // Delete from active tables
           await db.paymentSessions.delete(sessionId);
           await db.students.where("sessionId").equals(sessionId).delete();
           await db.invalidReceipts.where("sessionId").equals(sessionId).delete();
-          // Update state
           setDeletedSessions(prev => [...prev, {
             id: sessionId,
             name: currentSession.name,
@@ -364,7 +353,6 @@
         }, 500);
       };
 
-      // Restore a session from trash bin
       const restoreSession = async (sessionId) => {
         setIsLoading(true);
         setTimeout(async () => {
@@ -374,9 +362,7 @@
             setIsLoading(false);
             return;
           }
-          // Restore to paymentSessions
           await db.paymentSessions.add({ id: sessionId, name: deletedSession.name });
-          // Restore students and invalid receipts
           const studentsToRestore = deletedSession.students.map(s => ({ ...s, sessionId }));
           const invalidReceiptsToRestore = deletedSession.invalidReceipts.map(r => ({ ...r, sessionId }));
           if (studentsToRestore.length > 0) {
@@ -385,12 +371,9 @@
           if (invalidReceiptsToRestore.length > 0) {
             await db.invalidReceipts.bulkAdd(invalidReceiptsToRestore);
           }
-          // Remove from deletedSessions
           await db.deletedSessions.delete(sessionId);
-          // Update state
           setSessions(prev => [...prev, { id: sessionId, name: deletedSession.name }]);
           setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
-          // Set as current session
           setCurrentSession({ id: sessionId, name: deletedSession.name });
           setStudents(studentsToRestore.map(s => ({
             ...s,
@@ -404,7 +387,6 @@
         }, 500);
       };
 
-      // Permanently delete a session from trash bin
       const permanentlyDeleteSession = async (sessionId) => {
         setIsLoading(true);
         setTimeout(async () => {
@@ -415,7 +397,6 @@
         }, 500);
       };
 
-      // Clear all sessions from trash bin
       const clearTrashBin = async () => {
         setIsLoading(true);
         setTimeout(async () => {
@@ -426,7 +407,6 @@
         }, 500);
       };
 
-      // Add single student
       const addStudent = async (e) => {
         e.preventDefault();
         if (!currentSession) {
@@ -452,7 +432,6 @@
         setNewStudent({ name: "", expectedAmount: "" });
       };
 
-      // Process CSV file for bulk student upload
       const processCSV = async (file) => {
         console.log(`Processing CSV: ${file.name}`);
         try {
@@ -530,7 +509,6 @@
         }
       };
 
-      // Handle CSV file upload
       const handleCSVUpload = async (files) => {
         if (!currentSession) {
           setError("Please create or select a session first");
@@ -547,7 +525,6 @@
         }
       };
 
-      // CSV drag-and-drop handlers
       const handleCSVDragOver = (e) => {
         e.preventDefault();
         setIsDraggingCSV(true);
@@ -565,7 +542,6 @@
         handleCSVUpload(files);
       };
 
-      // Edit student
       const editStudent = async (id, updatedStudent) => {
         if (!updatedStudent.name.trim() || isNaN(updatedStudent.expectedAmount) || updatedStudent.expectedAmount <= 0) {
           setError("Invalid name or amount");
@@ -576,13 +552,11 @@
         setStudents(prev => prev.map(s => (s.id === id ? { ...s, ...updatedStudent } : s)));
       };
 
-      // Delete student
       const deleteStudent = async (id) => {
         await db.students.delete(id);
         setStudents(prev => prev.filter(s => s.id !== id));
       };
 
-      // Validate PDF file by checking magic number
       const validatePDFFile = async (file) => {
         try {
           const arrayBuffer = await file.slice(0, 5).arrayBuffer();
@@ -595,7 +569,6 @@
         }
       };
 
-      // Process PDF
       const processPDF = async (file) => {
         if (!currentSession) {
           setError("Please create or select a session first");
@@ -735,7 +708,6 @@
         }
       };
 
-      // Handle PDF file upload
       const handleFileUpload = async (files) => {
         const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf" || f.name.endsWith(".pdf"));
         if (pdfFiles.length === 0) {
@@ -748,7 +720,6 @@
         }
       };
 
-      // PDF drag-and-drop handlers
       const handleDragOver = (e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -766,7 +737,6 @@
         handleFileUpload(files);
       };
 
-      // Manually assign receipt
       const assignReceipt = async (receiptId, studentId, amount) => {
         if (!studentId || isNaN(amount) || amount <= 0) {
           setError("Invalid student or amount");
@@ -789,7 +759,6 @@
         setPdfError("");
       };
 
-      // Delete payment
       const deletePayment = async (id) => {
         await db.students.update(id, { paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null });
         setStudents(prev => prev.map(s => 
@@ -797,13 +766,11 @@
         ));
       };
 
-      // Delete invalid receipt
       const deleteInvalidReceipt = async (id) => {
         await db.invalidReceipts.delete(id);
         setInvalidReceipts(prev => prev.filter(r => r.id !== id));
       };
 
-      // Export to CSV
       const exportToCSV = () => {
         const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
         const rows = students.map(s => [
@@ -824,7 +791,6 @@
         URL.revokeObjectURL(url);
       };
 
-      // Filter and sort students
       const filteredStudents = students.filter(s => 
         filter === "All" || s.status === filter
       ).sort((a, b) => {
@@ -920,238 +886,241 @@
               )}
             </div>
 
-            {/* Add Student Form */}
-            <div className="bg-white p-6 rounded shadow-md mb-6">
-              <h2 className="text-xl font-bold mb-4">Add Student</h2>
-              <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4 mb-6">
-                <input
-                  type="text"
-                  value={newStudent.name}
-                  onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                  placeholder="Student Name"
-                  className="p-2 border rounded flex-1"
-                  required
-                />
-                <input
-                  type="number"
-                  value={newStudent.expectedAmount}
-                  onChange={(e) => setNewStudent({ ...newStudent, expectedAmount: e.target.value })}
-                  placeholder="Expected Amount (RM)"
-                  step="0.01"
-                  min="0"
-                  className="p-2 border rounded flex-1"
-                  required
-                />
-                <button type="submit" className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200">
-                  Add
-                </button>
-              </form>
-              <div
-                className={`border-2 border-dashed rounded p-6 text-center ${
-                  isDraggingCSV ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
-                }`}
-                onDragOver={handleCSVDragOver}
-                onDragLeave={handleCSVDragLeave}
-                onDrop={handleCSVDrop}
-              >
-                <p className="mb-4">Drag and drop a CSV file with student names and expected amounts, or click to select</p>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => handleCSVUpload(e.target.files)}
-                  className="hidden"
-                  id="csvInput"
-                />
-                <label
-                  htmlFor="csvInput"
-                  className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
-                >
-                  Select CSV File
-                </label>
-              </div>
-            </div>
-
-            {/* PDF Upload with Drag-and-Drop */}
-            <div className="bg-white p-6 rounded shadow-md mb-6">
-              <h2 className="text-xl font-bold mb-4">Upload Receipts</h2>
-              {pdfError && <p className="text-red-500 mb-4">{pdfError}</p>}
-              <div
-                className={`border-2 border-dashed rounded p-6 text-center ${
-                  isDragging ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <p className="mb-4">Drag and drop PDF files here or click to select</p>
-                <input
-                  type="file"
-                  accept=".pdf"
-                  multiple
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  className="hidden"
-                  id="fileInput"
-                />
-                <label
-                  htmlFor="fileInput"
-                  className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
-                >
-                  Select Files
-                </label>
-              </div>
-            </div>
-
-            {/* Dashboard */}
-            <div className="bg-white p-6 rounded shadow-md mb-6">
-              <h2 className="text-xl font-bold mb-4">Payment Status</h2>
-              <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  className="p-2 border rounded"
-                >
-                  <option value="All">All</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Unpaid">Unpaid</option>
-                  <option value="Incorrect">Incorrect</option>
-                  <option value="No File Matched">No File Matched</option>
-                </select>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="p-2 border rounded"
-                >
-                  <option value="name-asc">Name (A-Z)</option>
-                  <option value="name-desc">Name (Z-A)</option>
-                  <option value="status-asc">Status (A-Z)</option>
-                  <option value="status-desc">Status (Z-A)</option>
-                </select>
-                <button
-                  onClick={exportToCSV}
-                  className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
-                >
-                  Export to CSV
-                </button>
-              </div>
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-200">
-                    <th className="border p-2">Name</th>
-                    <th className="border p-2">Expected Amount</th>
-                    <th className="border p-2">Paid Amount</th>
-                    <th className="border p-2">Transaction Date</th>
-                    <th className="border p-2">Status</th>
-                    <th className="border p-2">PDF File</th>
-                    <th className="border p-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.map(student => (
-                    <tr 
-                      key={student.id} 
-                      className={
-                        student.status === "Paid" 
-                          ? "bg-green-100 hover:bg-green-200" 
-                          : student.status === "Incorrect" 
-                          ? "bg-orange-100 hover:bg-orange-200" 
-                          : "bg-gray-100 hover:bg-gray-200"
-                      }
-                    >
-                      <td className="border p-2">{student.name}</td>
-                      <td className="border p-2">RM{student.expectedAmount}</td>
-                      <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
-                      <td className="border p-2">{student.transactionDate || "-"}</td>
-                      <td className="border p-2">{student.status}</td>
-                      <td className="border p-2">{student.pdfFilename || "-"}</td>
-                      <td className="border p-2 flex gap-2">
-                        <button
-                          onClick={() => {
-                            const newName = prompt("Enter new name", student.name);
-                            const newAmount = prompt("Enter new expected amount", student.expectedAmount);
-                            if (newName && newAmount) {
-                              editStudent(student.id, {
-                                name: newName,
-                                expectedAmount: newAmount
-                              });
-                            }
-                          }}
-                          className="bg-yellow-300 text-white p-1 rounded-md shadow-sm hover:bg-yellow-400 hover:bg-opacity-80 transition-colors duration-200"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteStudent(student.id)}
-                          className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
-                        >
-                          Delete
-                        </button>
-                        {student.paidAmount && (
-                          <button
-                            onClick={() => deletePayment(student.id)}
-                            className="bg-gray-400 text-white p-1 rounded-md shadow-sm hover:bg-gray-500 hover:bg-opacity-80 transition-colors duration-200"
-                          >
-                            Clear Payment
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Invalid Receipts */}
-            {invalidReceipts.length > 0 && (
+            {/* Session Workspace Canvas */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+              {/* Add Student Form */}
               <div className="bg-white p-6 rounded shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-4">Invalid Receipts</h2>
+                <h2 className="text-xl font-bold mb-4">Add Student</h2>
+                <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <input
+                    type="text"
+                    value={newStudent.name}
+                    onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                    placeholder="Student Name"
+                    className="p-2 border rounded flex-1"
+                    required
+                  />
+                  <input
+                    type="number"
+                    value={newStudent.expectedAmount}
+                    onChange={(e) => setNewStudent({ ...newStudent, expectedAmount: e.target.value })}
+                    placeholder="Expected Amount (RM)"
+                    step="0.01"
+                    min="0"
+                    className="p-2 border rounded flex-1"
+                    required
+                  />
+                  <button type="submit" className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200">
+                    Add
+                  </button>
+                </form>
+                <div
+                  className={`border-2 border-dashed rounded p-6 text-center ${
+                    isDraggingCSV ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                  }`}
+                  onDragOver={handleCSVDragOver}
+                  onDragLeave={handleCSVDragLeave}
+                  onDrop={handleCSVDrop}
+                >
+                  <p className="mb-4">Drag and drop a CSV file with student names and expected amounts, or click to select</p>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={(e) => handleCSVUpload(e.target.files)}
+                    className="hidden"
+                    id="csvInput"
+                  />
+                  <label
+                    htmlFor="csvInput"
+                    className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
+                  >
+                    Select CSV File
+                  </label>
+                </div>
+              </div>
+
+              {/* PDF Upload with Drag-and-Drop */}
+              <div className="bg-white p-6 rounded shadow-md mb-6">
+                <h2 className="text-xl font-bold mb-4">Upload Receipts</h2>
+                {pdfError && <p className="text-red-500 mb-4">{pdfError}</p>}
+                <div
+                  className={`border-2 border-dashed rounded p-6 text-center ${
+                    isDragging ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <p className="mb-4">Drag and drop PDF files here or click to select</p>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    multiple
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                    className="hidden"
+                    id="fileInput"
+                  />
+                  <label
+                    htmlFor="fileInput"
+                    className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
+                  >
+                    Select Files
+                  </label>
+                </div>
+              </div>
+
+              {/* Dashboard */}
+              <div className="bg-white p-6 rounded shadow-md mb-6">
+                <h2 className="text-xl font-bold mb-4">Payment Status</h2>
+                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                  <select
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    className="p-2 border rounded"
+                  >
+                    <option value="All">All</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Unpaid">Unpaid</option>
+                    <option value="Incorrect">Incorrect</option>
+                    <option value="No File Matched">No File Matched</option>
+                  </select>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="p-2 border rounded"
+                  >
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="status-asc">Status (A-Z)</option>
+                    <option value="status-desc">Status (Z-A)</option>
+                  </select>
+                  <button
+                    onClick={exportToCSV}
+                    className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
+                  >
+                    Export to CSV
+                  </button>
+                </div>
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-200">
-                      <th className="border p-2">Filename</th>
-                      <th className="border p-2">PDF Content</th>
-                      <th className="border p-2">Reason</th>
-                      <th className="border p-2">Assign</th>
+                      <th className="border p-2">Name</th>
+                      <th className="border p-2">Expected Amount</th>
+                      <th className="border p-2">Paid Amount</th>
+                      <th className="border p-2">Transaction Date</th>
+                      <th className="border p-2">Status</th>
+                      <th className="border p-2">PDF File</th>
                       <th className="border p-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {invalidReceipts.map(receipt => (
-                      <tr key={receipt.id} className="hover:bg-gray-100">
-                        <td className="border p-2">{receipt.filename}</td>
-                        <td className="border p-2">
-                          <div className="text-sm text-gray-700 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
-                        </td>
-                        <td className="border p-2">{receipt.reason}</td>
+                    {filteredStudents.map(student => (
+                      <tr 
+                        key={student.id} 
+                        className={
+                          student.status === "Paid" 
+                            ? "bg-green-100 hover:bg-green-200" 
+                            : student.status === "Incorrect" 
+                            ? "bg-orange-100 hover:bg-orange-200" 
+                            : "bg-gray-100 hover:bg-gray-200"
+                        }
+                      >
+                        <td className="border p-2">{student.name}</td>
+                        <td className="border p-2">RM{student.expectedAmount}</td>
+                        <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
+                        <td className="border p-2">{student.transactionDate || "-"}</td>
+                        <td className="border p-2">{student.status}</td>
+                        <td className="border p-2">{student.pdfFilename || "-"}</td>
                         <td className="border p-2 flex gap-2">
-                          <select
-                            className="p-1 border rounded"
-                            onChange={(e) => {
-                              const amount = prompt("Enter amount");
-                              if (amount) {
-                                assignReceipt(receipt.id, e.target.value, amount);
+                          <button
+                            onClick={() => {
+                              const newName = prompt("Enter new name", student.name);
+                              const newAmount = prompt("Enter new expected amount", student.expectedAmount);
+                              if (newName && newAmount) {
+                                editStudent(student.id, {
+                                  name: newName,
+                                  expectedAmount: newAmount
+                                });
                               }
                             }}
+                            className="bg-yellow-300 text-white p-1 rounded-md shadow-sm hover:bg-yellow-400 hover:bg-opacity-80 transition-colors duration-200"
                           >
-                            <option value="">Select Student</option>
-                            {students.map(s => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="border p-2">
+                            Edit
+                          </button>
                           <button
-                            onClick={() => deleteInvalidReceipt(receipt.id)}
+                            onClick={() => deleteStudent(student.id)}
                             className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
                           >
                             Delete
                           </button>
+                          {student.paidAmount && (
+                            <button
+                              onClick={() => deletePayment(student.id)}
+                              className="bg-gray-400 text-white p-1 rounded-md shadow-sm hover:bg-gray-500 hover:bg-opacity-80 transition-colors duration-200"
+                            >
+                              Clear Payment
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
+
+              {/* Invalid Receipts */}
+              {invalidReceipts.length > 0 && (
+                <div className="bg-white p-6 rounded shadow-md">
+                  <h2 className="text-xl font-bold mb-4">Invalid Receipts</h2>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-200">
+                        <th className="border p-2">Filename</th>
+                        <th className="border p-2">PDF Content</th>
+                        <th className="border p-2">Reason</th>
+                        <th className="border p-2">Assign</th>
+                        <th className="border p-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invalidReceipts.map(receipt => (
+                        <tr key={receipt.id} className="hover:bg-gray-100">
+                          <td className="border p-2">{receipt.filename}</td>
+                          <td className="border p-2">
+                            <div className="text-sm text-gray-700 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
+                          </td>
+                          <td className="border p-2">{receipt.reason}</td>
+                          <td className="border p-2 flex gap-2">
+                            <select
+                              className="p-1 border rounded"
+                              onChange={(e) => {
+                                const amount = prompt("Enter amount");
+                                if (amount) {
+                                  assignReceipt(receipt.id, e.target.value, amount);
+                                }
+                              }}
+                            >
+                              <option value="">Select Student</option>
+                              {students.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="border p-2">
+                            <button
+                              onClick={() => deleteInvalidReceipt(receipt.id)}
+                              className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             {/* Trash Bin */}
             {deletedSessions.length > 0 && (
@@ -1201,7 +1170,6 @@
       );
     }
 
-    // Render the app
     ReactDOM.render(<App />, document.getElementById("root"));
   </script>
 </body>
