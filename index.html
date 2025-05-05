@@ -294,22 +294,6 @@
         }, 500);
       };
 
-      // Save the current session
-      const saveSession = async () => {
-        if (!currentSession) {
-          setError("No session selected to save");
-          return;
-        }
-        setIsLoading(true);
-        setTimeout(async () => {
-          await db.students.where("sessionId").equals(currentSession.id).delete();
-          const studentsToSave = students.map(s => ({ ...s, sessionId: currentSession.id }));
-          await db.students.bulkAdd(studentsToSave);
-          setError("Session saved successfully");
-          setIsLoading(false);
-        }, 500);
-      };
-
       // Open an existing session
       const openSession = async (sessionId) => {
         const session = sessions.find(s => s.id === parseInt(sessionId));
@@ -695,7 +679,7 @@
           s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), transactionDate: null, status, pdfFilename: receipt.filename } : s
         ));
         setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
-        setPdfError(""); // Clear pdfError after successful assignment
+        setPdfError("");
       };
 
       // Delete payment
@@ -802,12 +786,6 @@
                   className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200"
                 >
                   New Session
-                </button>
-                <button
-                  onClick={saveSession}
-                  className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
-                >
-                  Save Session
                 </button>
                 <select
                   onChange={(e) => openSession(e.target.value)}
