@@ -879,15 +879,16 @@
                   </button>
                 )}
               </div>
-              {currentSession && (
-                <h3 className="text-2xl font-bold text-center bg-blue-100 p-3 rounded mt-4">
-                  Current Session: {currentSession.name}
-                </h3>
-              )}
             </div>
 
             {/* Session Workspace Canvas */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+              {currentSession && (
+                <h3 className="text-2xl font-bold text-center bg-blue-100 p-3 rounded mb-6">
+                  Current Session: {currentSession.name}
+                </h3>
+              )}
+
               {/* Add Student Form */}
               <div className="bg-white p-6 rounded shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-4">Add Student</h2>
