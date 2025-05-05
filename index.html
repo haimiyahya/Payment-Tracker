@@ -368,7 +368,7 @@
 
       // Handle CSV file upload
       const handleCSVUpload = async (files) => {
-        const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".csv"));
+        const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".pdf"));
         if (csvFiles.length === 0) {
           setError("Please upload a valid CSV file");
           return;
@@ -479,17 +479,26 @@
             console.log(`BM25 match for ${filename}: ${matchedStudent ? matchedStudent.name : 'None'}`);
           }
 
+          // Check if this PDF was previously marked as invalid; if so, remove it to reprocess
+          const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
+          if (existingReceipt) {
+            console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
+            await db.invalidReceipts.delete(existingReceipt.id);
+            setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
+          }
+
+          // Check if the PDF is already associated with a student
+          const studentWithPDF = students.find(s => s.pdfFilename === file.name);
+          if (studentWithPDF) {
+            console.log(`PDF ${file.name} is already associated with student ${studentWithPDF.name}. Skipping.`);
+            setPdfError(`PDF ${file.name} is already associated with ${studentWithPDF.name}.`);
+            return;
+          }
+
           if (!matchedStudent || !extractedAmount) {
             let reason = "No student matched";
             if (matchedStudent && !extractedAmount) {
               reason = "No amount found in PDF";
-            }
-            // Check for duplicate receipt
-            const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
-            if (existingReceipt) {
-              console.log(`Duplicate receipt detected: ${file.name}`);
-              setPdfError(`Duplicate receipt detected: ${file.name}. Skipping.`);
-              return;
             }
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
             const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
@@ -521,12 +530,12 @@
           }
           
           const reason = `Failed to process: ${userFriendlyMessage}`;
-          // Check for duplicate receipt
+          // Check if this PDF was previously marked as invalid; if so, remove it to reprocess
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
           if (existingReceipt) {
-            console.log(`Duplicate receipt detected: ${file.name}`);
-            setPdfError(`Duplicate receipt detected: ${file.name}. Skipping.`);
-            return;
+            console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
+            await db.invalidReceipts.delete(existingReceipt.id);
+            setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
           console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
           const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text" });
