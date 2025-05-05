@@ -231,7 +231,7 @@
         e.preventDefault();
         setError("");
         const storedKey = await db.settings.get("passwordKey");
-        const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 310000 }).toString();
+        const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 150000 }).toString();
         
         if (!storedKey) {
           await db.settings.put({ key: "passwordKey", value: derivedKey });
