@@ -59,10 +59,11 @@
 
     // Initialize Dexie.js for IndexedDB
     const db = new Dexie("PaymentTrackerDB");
-    db.version(1).stores({
-      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename",
+    db.version(2).stores({
+      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
       invalidReceipts: "++id,filename,reason,data",
-      settings: "key,value"
+      settings: "key,value",
+      paymentSessions: "++id,name"
     });
 
     // Simplified BM25 implementation
@@ -122,12 +123,9 @@
     const formatPDFText = (text) => {
       if (!text || typeof text !== "string") return "No text available";
 
-      // Remove non-printable characters (ASCII < 32, except for space)
       let cleaned = text.replace(/[\x00-\x1F\x7F]+/g, " ");
-      // Replace multiple spaces with a single space
       cleaned = cleaned.replace(/\s+/g, " ").trim();
 
-      // Extract key information using regex
       const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
       const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
       const refNumberRegex = /\b\d{10}\b/;
@@ -138,7 +136,6 @@
       const refNumberMatch = cleaned.match(refNumberRegex);
       const otherDetailsMatch = cleaned.match(otherDetailsRegex);
 
-      // Prioritize key information
       let prioritizedText = "";
       if (dateMatch) {
         prioritizedText += `Date: ${dateMatch[0]}\n`;
@@ -153,7 +150,6 @@
         prioritizedText += `Other Transfer Details: ${otherDetailsMatch[0]}\n`;
       }
 
-      // Add the rest of the text, excluding already included parts
       let remainingText = cleaned;
       if (amountMatch) remainingText = remainingText.replace(amountMatch[0], "").replace(/\s+/g, " ").trim();
       if (dateMatch) remainingText = remainingText.replace(dateMatch[0], "").replace(/\s+/g, " ").trim();
@@ -162,7 +158,6 @@
 
       prioritizedText += remainingText;
 
-      // Truncate to 500 characters for display
       if (prioritizedText.length > 500) {
         prioritizedText = prioritizedText.substring(0, 500) + "...";
       }
@@ -174,8 +169,8 @@
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [password, setPassword] = useState("");
-      const [error, setError] = useState(""); // General errors (e.g., login, CSV)
-      const [pdfError, setPdfError] = useState(""); // PDF-specific errors
+      const [error, setError] = useState("");
+      const [pdfError, setPdfError] = useState("");
       const [students, setStudents] = useState([]);
       const [invalidReceipts, setInvalidReceipts] = useState([]);
       const [newStudent, setNewStudent] = useState({ name: "", expectedAmount: "" });
@@ -184,18 +179,28 @@
       const [sessionTimeout, setSessionTimeout] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
       const [isDraggingCSV, setIsDraggingCSV] = useState(false);
+      const [sessions, setSessions] = useState([]);
+      const [currentSession, setCurrentSession] = useState(null);
+      const [newSessionName, setNewSessionName] = useState("");
 
       // Load data from IndexedDB
       const loadData = async () => {
-        const studentsData = await db.students.toArray();
         const invalidData = await db.invalidReceipts.toArray();
-        setStudents(studentsData.map(s => ({
-          ...s,
-          status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-          pdfFilename: s.pdfFilename || null,
-          transactionDate: s.transactionDate || null
-        })));
         setInvalidReceipts(invalidData);
+        const sessionsData = await db.paymentSessions.toArray();
+        setSessions(sessionsData);
+        // Load the last session if it exists
+        if (sessionsData.length > 0) {
+          const lastSession = sessionsData[sessionsData.length - 1];
+          setCurrentSession(lastSession);
+          const studentsData = await db.students.where("sessionId").equals(lastSession.id).toArray();
+          setStudents(studentsData.map(s => ({
+            ...s,
+            status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: s.pdfFilename || null,
+            transactionDate: s.transactionDate || null
+          })));
+        }
       };
 
       // Session management
@@ -204,7 +209,7 @@
           const session = await db.settings.get("session");
           if (session && session.value > Date.now()) {
             setIsAuthenticated(true);
-            await loadData(); // Load data on successful session check
+            await loadData();
             resetSessionTimeout();
           } else {
             setIsAuthenticated(false);
@@ -222,6 +227,8 @@
           setError("Session timed out. Please log in again.");
           setStudents([]);
           setInvalidReceipts([]);
+          setSessions([]);
+          setCurrentSession(null);
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
       };
@@ -237,13 +244,13 @@
           await db.settings.put({ key: "passwordKey", value: derivedKey });
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
-          await loadData(); // Load data after successful login
+          await loadData();
           resetSessionTimeout();
           setPassword("");
         } else if (storedKey.value === derivedKey) {
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
-          await loadData(); // Load data after successful login
+          await loadData();
           resetSessionTimeout();
           setPassword("");
         } else {
@@ -258,13 +265,67 @@
         setIsAuthenticated(false);
         setError("");
         setPdfError("");
-        setStudents([]); // Clear students on logout
-        setInvalidReceipts([]); // Clear invalid receipts on logout
+        setStudents([]);
+        setInvalidReceipts([]);
+        setSessions([]);
+        setCurrentSession(null);
+      };
+
+      // Create a new session
+      const createNewSession = async () => {
+        if (!newSessionName.trim()) {
+          setError("Please enter a session name");
+          return;
+        }
+        const session = { name: newSessionName.trim() };
+        const sessionId = await db.paymentSessions.add(session);
+        const newSession = { ...session, id: sessionId };
+        setSessions(prev => [...prev, newSession]);
+        setCurrentSession(newSession);
+        setStudents([]);
+        setNewSessionName("");
+        setError("");
+      };
+
+      // Save the current session
+      const saveSession = async () => {
+        if (!currentSession) {
+          setError("No session selected to save");
+          return;
+        }
+        // Delete existing students for this session
+        await db.students.where("sessionId").equals(currentSession.id).delete();
+        // Add current students to the session
+        const studentsToSave = students.map(s => ({ ...s, sessionId: currentSession.id }));
+        await db.students.bulkAdd(studentsToSave);
+        setError("Session saved successfully");
+      };
+
+      // Open an existing session
+      const openSession = async (sessionId) => {
+        const session = sessions.find(s => s.id === parseInt(sessionId));
+        if (!session) {
+          setError("Session not found");
+          return;
+        }
+        setCurrentSession(session);
+        const studentsData = await db.students.where("sessionId").equals(session.id).toArray();
+        setStudents(studentsData.map(s => ({
+          ...s,
+          status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+          pdfFilename: s.pdfFilename || null,
+          transactionDate: s.transactionDate || null
+        })));
+        setError("");
       };
 
       // Add single student
       const addStudent = async (e) => {
         e.preventDefault();
+        if (!currentSession) {
+          setError("Please create or select a session first");
+          return;
+        }
         const { name, expectedAmount } = newStudent;
         if (!name.trim() || isNaN(expectedAmount) || expectedAmount <= 0) {
           setError("Invalid name or amount");
@@ -276,7 +337,8 @@
           paidAmount: null,
           transactionDate: null,
           status: "No File Matched",
-          pdfFilename: null
+          pdfFilename: null,
+          sessionId: currentSession.id
         };
         const id = await db.students.add(student);
         setStudents(prev => [...prev, { ...student, id }]);
@@ -296,13 +358,11 @@
               const errors = [];
               const validStudents = [];
 
-              // Normalize headers: strip quotes, whitespace, BOM, and make case-insensitive
               const headers = result.meta.fields.map(h => 
                 h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase()
               );
               console.log(`Parsed headers: ${JSON.stringify(headers)}`);
 
-              // Expected headers (case-insensitive)
               const requiredHeaders = ["name", "expected amount"];
               const nameHeader = headers.find(h => h === "name");
               const amountHeader = headers.find(h => h === "expected amount");
@@ -312,11 +372,9 @@
                 return;
               }
 
-              // Find original header names for accessing data
               const originalNameHeader = result.meta.fields[headers.indexOf("name")];
               const originalAmountHeader = result.meta.fields[headers.indexOf("expected amount")];
 
-              // Process each row
               for (let i = 0; i < data.length; i++) {
                 const row = data[i];
                 const name = row[originalNameHeader]?.trim();
@@ -333,11 +391,11 @@
                   paidAmount: null,
                   transactionDate: null,
                   status: "No File Matched",
-                  pdfFilename: null
+                  pdfFilename: null,
+                  sessionId: currentSession.id
                 });
               }
 
-              // Add valid students to database
               if (validStudents.length > 0) {
                 const ids = await db.students.bulkAdd(validStudents, { allKeys: true });
                 const newStudents = validStudents.map((student, index) => ({
@@ -348,7 +406,6 @@
                 console.log(`Added ${newStudents.length} students from CSV`);
               }
 
-              // Report errors
               if (errors.length > 0) {
                 setError(`Added ${validStudents.length} students. Errors: ${errors.join("; ")}`);
               } else {
@@ -368,7 +425,11 @@
 
       // Handle CSV file upload
       const handleCSVUpload = async (files) => {
-        const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".pdf"));
+        if (!currentSession) {
+          setError("Please create or select a session first");
+          return;
+        }
+        const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".csv"));
         if (csvFiles.length === 0) {
           setError("Please upload a valid CSV file");
           return;
@@ -429,10 +490,13 @@
 
       // Process PDF
       const processPDF = async (file) => {
+        if (!currentSession) {
+          setError("Please create or select a session first");
+          return;
+        }
         console.log(`Processing PDF: ${file.name}`);
         let text = "";
         try {
-          // Validate PDF magic number
           const isValidPDF = await validatePDFFile(file);
           if (!isValidPDF) {
             throw new Error("Invalid PDF format: File does not start with %PDF-");
@@ -479,7 +543,6 @@
             console.log(`BM25 match for ${filename}: ${matchedStudent ? matchedStudent.name : 'None'}`);
           }
 
-          // Check if this PDF was previously marked as invalid; if so, remove it to reprocess
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
           if (existingReceipt) {
             console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
@@ -487,7 +550,6 @@
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
 
-          // Check if the PDF is already associated with a student
           const studentWithPDF = students.find(s => s.pdfFilename === file.name);
           if (studentWithPDF) {
             console.log(`PDF ${file.name} is already associated with student ${studentWithPDF.name}. Skipping.`);
@@ -530,7 +592,6 @@
           }
           
           const reason = `Failed to process: ${userFriendlyMessage}`;
-          // Check if this PDF was previously marked as invalid; if so, remove it to reprocess
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).first();
           if (existingReceipt) {
             console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
@@ -545,7 +606,7 @@
         }
       };
 
-      // Handle PDF file upload (sequential processing)
+      // Handle PDF file upload
       const handleFileUpload = async (files) => {
         const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf" || f.name.endsWith(".pdf"));
         if (pdfFiles.length === 0) {
@@ -628,7 +689,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "payment_tracker.csv";
+        a.download = `payment_tracker_${currentSession ? currentSession.name.replace(/\s+/g, "_") : "unnamed"}.csv`;
         a.click();
         URL.revokeObjectURL(url);
       };
@@ -681,10 +742,48 @@
             </div>
             {error && <p className="text-red-500 mb-4">{error}</p>}
 
+            {/* Session Management */}
+            <div className="bg-white p-6 rounded shadow-md mb-6">
+              <h2 className="text-xl font-bold mb-4">Payment Sessions</h2>
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <input
+                  type="text"
+                  value={newSessionName}
+                  onChange={(e) => setNewSessionName(e.target.value)}
+                  placeholder="New Session Name (e.g., Book Payments)"
+                  className="p-2 border rounded flex-1"
+                />
+                <button
+                  onClick={createNewSession}
+                  className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200"
+                >
+                  New Session
+                </button>
+                <button
+                  onClick={saveSession}
+                  className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
+                >
+                  Save Session
+                </button>
+                <select
+                  onChange={(e) => openSession(e.target.value)}
+                  className="p-2 border rounded"
+                  value={currentSession ? currentSession.id : ""}
+                >
+                  <option value="">Select a Session</option>
+                  {sessions.map(session => (
+                    <option key={session.id} value={session.id}>{session.name}</option>
+                  ))}
+                </select>
+              </div>
+              {currentSession && (
+                <p className="text-gray-700">Current Session: {currentSession.name}</p>
+              )}
+            </div>
+
             {/* Add Student Form */}
             <div className="bg-white p-6 rounded shadow-md mb-6">
               <h2 className="text-xl font-bold mb-4">Add Student</h2>
-              {/* Manual Entry Form */}
               <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4 mb-6">
                 <input
                   type="text"
@@ -708,7 +807,6 @@
                   Add
                 </button>
               </form>
-              {/* CSV Upload */}
               <div
                 className={`border-2 border-dashed rounded p-6 text-center ${
                   isDraggingCSV ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
