@@ -59,11 +59,12 @@
 
     // Initialize Dexie.js for IndexedDB
     const db = new Dexie("PaymentTrackerDB");
-    db.version(3).stores({
+    db.version(4).stores({
       students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
       invalidReceipts: "++id,filename,reason,data,sessionId",
       settings: "key,value",
-      paymentSessions: "++id,name"
+      paymentSessions: "++id,name",
+      deletedSessions: "++id,name,students,invalidReceipts" // New table for deleted sessions
     });
 
     // Simplified BM25 implementation
@@ -183,11 +184,14 @@
       const [currentSession, setCurrentSession] = useState(null);
       const [newSessionName, setNewSessionName] = useState("");
       const [isLoading, setIsLoading] = useState(false);
+      const [deletedSessions, setDeletedSessions] = useState([]); // State for deleted sessions
 
       // Load data from IndexedDB
       const loadData = async () => {
         const sessionsData = await db.paymentSessions.toArray();
         setSessions(sessionsData);
+        const deletedSessionsData = await db.deletedSessions.toArray();
+        setDeletedSessions(deletedSessionsData);
         // Load the last session if it exists
         if (sessionsData.length > 0) {
           const lastSession = sessionsData[sessionsData.length - 1];
@@ -229,6 +233,7 @@
           setStudents([]);
           setInvalidReceipts([]);
           setSessions([]);
+          setDeletedSessions([]);
           setCurrentSession(null);
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
@@ -269,6 +274,7 @@
         setStudents([]);
         setInvalidReceipts([]);
         setSessions([]);
+        setDeletedSessions([]);
         setCurrentSession(null);
       };
 
@@ -315,6 +321,107 @@
           setInvalidReceipts(invalidData);
           setError("");
           setPdfError("");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      // Delete a session and move to trash bin
+      const deleteSession = async () => {
+        if (!currentSession) {
+          setError("No session selected to delete");
+          return;
+        }
+        setIsLoading(true);
+        setTimeout(async () => {
+          const sessionId = currentSession.id;
+          // Fetch associated data
+          const sessionStudents = await db.students.where("sessionId").equals(sessionId).toArray();
+          const sessionInvalidReceipts = await db.invalidReceipts.where("sessionId").equals(sessionId).toArray();
+          // Move to deletedSessions table
+          await db.deletedSessions.add({
+            id: sessionId,
+            name: currentSession.name,
+            students: sessionStudents,
+            invalidReceipts: sessionInvalidReceipts
+          });
+          // Delete from active tables
+          await db.paymentSessions.delete(sessionId);
+          await db.students.where("sessionId").equals(sessionId).delete();
+          await db.invalidReceipts.where("sessionId").equals(sessionId).delete();
+          // Update state
+          setDeletedSessions(prev => [...prev, {
+            id: sessionId,
+            name: currentSession.name,
+            students: sessionStudents,
+            invalidReceipts: sessionInvalidReceipts
+          }]);
+          setSessions(prev => prev.filter(s => s.id !== sessionId));
+          setCurrentSession(null);
+          setStudents([]);
+          setInvalidReceipts([]);
+          setError("Session moved to Trash Bin");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      // Restore a session from trash bin
+      const restoreSession = async (sessionId) => {
+        setIsLoading(true);
+        setTimeout(async () => {
+          const deletedSession = deletedSessions.find(s => s.id === sessionId);
+          if (!deletedSession) {
+            setError("Session not found in Trash Bin");
+            setIsLoading(false);
+            return;
+          }
+          // Restore to paymentSessions
+          await db.paymentSessions.add({ id: sessionId, name: deletedSession.name });
+          // Restore students and invalid receipts
+          const studentsToRestore = deletedSession.students.map(s => ({ ...s, sessionId }));
+          const invalidReceiptsToRestore = deletedSession.invalidReceipts.map(r => ({ ...r, sessionId }));
+          if (studentsToRestore.length > 0) {
+            await db.students.bulkAdd(studentsToRestore);
+          }
+          if (invalidReceiptsToRestore.length > 0) {
+            await db.invalidReceipts.bulkAdd(invalidReceiptsToRestore);
+          }
+          // Remove from deletedSessions
+          await db.deletedSessions.delete(sessionId);
+          // Update state
+          setSessions(prev => [...prev, { id: sessionId, name: deletedSession.name }]);
+          setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
+          // Set as current session
+          setCurrentSession({ id: sessionId, name: deletedSession.name });
+          setStudents(studentsToRestore.map(s => ({
+            ...s,
+            status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: s.pdfFilename || null,
+            transactionDate: s.transactionDate || null
+          })));
+          setInvalidReceipts(invalidReceiptsToRestore);
+          setError("Session restored successfully");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      // Permanently delete a session from trash bin
+      const permanentlyDeleteSession = async (sessionId) => {
+        setIsLoading(true);
+        setTimeout(async () => {
+          await db.deletedSessions.delete(sessionId);
+          setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
+          setError("Session permanently deleted");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      // Clear all sessions from trash bin
+      const clearTrashBin = async () => {
+        setIsLoading(true);
+        setTimeout(async () => {
+          await db.deletedSessions.clear();
+          setDeletedSessions([]);
+          setError("Trash Bin cleared");
           setIsLoading(false);
         }, 500);
       };
@@ -797,6 +904,14 @@
                     <option key={session.id} value={session.id}>{session.name}</option>
                   ))}
                 </select>
+                {currentSession && (
+                  <button
+                    onClick={deleteSession}
+                    className="bg-red-400 text-white p-2 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                  >
+                    Delete Session
+                  </button>
+                )}
               </div>
               {currentSession && (
                 <h3 className="text-2xl font-bold text-center bg-blue-100 p-3 rounded mt-4">
@@ -987,7 +1102,7 @@
 
             {/* Invalid Receipts */}
             {invalidReceipts.length > 0 && (
-              <div className="bg-white p-6 rounded shadow-md">
+              <div className="bg-white p-6 rounded shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-4">Invalid Receipts</h2>
                 <table className="w-full border-collapse">
                   <thead>
@@ -1029,6 +1144,50 @@
                             className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
                           >
                             Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Trash Bin */}
+            {deletedSessions.length > 0 && (
+              <div className="bg-white p-6 rounded shadow-md">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Trash Bin</h2>
+                  <button
+                    onClick={clearTrashBin}
+                    className="bg-red-500 text-white p-2 rounded-md shadow-sm hover:bg-red-600 hover:bg-opacity-80 transition-colors duration-200"
+                  >
+                    Clear Trash Bin
+                  </button>
+                </div>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-200">
+                      <th className="border p-2">Session Name</th>
+                      <th className="border p-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deletedSessions.map(session => (
+                      <tr key={session.id} className="hover:bg-gray-100">
+                        <td className="border p-2">{session.name}</td>
+                        <td className="border p-2 flex gap-2">
+                          <button
+                            onClick={() => restoreSession(session.id)}
+                            className="bg-green-400 text-white p-1 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
+                          >
+                            Restore
+                          </button>
+                          <button
+                            onClick={() => permanentlyDeleteSession(session.id)}
+                            className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                          >
+                            Permanently Delete
                           </button>
                         </td>
                       </tr>
