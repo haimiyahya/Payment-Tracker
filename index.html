@@ -54,10 +54,41 @@
 </head>
 <body>
   <div id="root"></div>
+  <script type="text/javascript">
+    var gk_isXlsx = false;
+    var gk_xlsxFileLookup = {};
+    var gk_fileData = {};
+    function filledCell(cell) {
+      return cell !== '' && cell != null;
+    }
+    function loadFileData(filename) {
+      if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+        try {
+          var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+          var firstSheetName = workbook.SheetNames[0];
+          var worksheet = workbook.Sheets[firstSheetName];
+          var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+          var filteredData = jsonData.filter(row => row.some(filledCell));
+          var headerRowIndex = filteredData.findIndex((row, index) =>
+            row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+          );
+          if (headerRowIndex === -1 || headerRowIndex > 25) {
+            headerRowIndex = 0;
+          }
+          var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+          csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+          return csv;
+        } catch (e) {
+          console.error(e);
+          return "";
+        }
+      }
+      return gk_fileData[filename] || "";
+    }
+  </script>
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Initialize Dexie.js for IndexedDB
     const db = new Dexie("PaymentTrackerDB");
     db.version(4).stores({
       students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
@@ -67,7 +98,6 @@
       deletedSessions: "++id,name,students,invalidReceipts"
     });
 
-    // Simplified BM25 implementation
     const BM25 = {
       k1: 1.5,
       b: 0.75,
@@ -120,53 +150,35 @@
       }
     };
 
-    // Function to clean and prioritize PDF text
     const formatPDFText = (text) => {
       if (!text || typeof text !== "string") return "No text available";
-
       let cleaned = text.replace(/[\x00-\x1F\x7F]+/g, " ");
       cleaned = cleaned.replace(/\s+/g, " ").trim();
-
       const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
       const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
       const refNumberRegex = /\b\d{10}\b/;
       const otherDetailsRegex = /\bYURAN\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4}\b/;
-
       const amountMatch = cleaned.match(amountRegex);
       const dateMatch = cleaned.match(dateRegex);
       const refNumberMatch = cleaned.match(refNumberRegex);
       const otherDetailsMatch = cleaned.match(otherDetailsRegex);
-
       let prioritizedText = "";
-      if (dateMatch) {
-        prioritizedText += `Date: ${dateMatch[0]}\n`;
-      }
-      if (amountMatch) {
-        prioritizedText += `Amount: ${amountMatch[0]}\n`;
-      }
-      if (refNumberMatch) {
-        prioritizedText += `Reference Number: ${refNumberMatch[0]}\n`;
-      }
-      if (otherDetailsMatch) {
-        prioritizedText += `Other Transfer Details: ${otherDetailsMatch[0]}\n`;
-      }
-
+      if (dateMatch) prioritizedText += `Date: ${dateMatch[0]}\n`;
+      if (amountMatch) prioritizedText += `Amount: ${amountMatch[0]}\n`;
+      if (refNumberMatch) prioritizedText += `Reference Number: ${refNumberMatch[0]}\n`;
+      if (otherDetailsMatch) prioritizedText += `Other Transfer Details: ${otherDetailsMatch[0]}\n`;
       let remainingText = cleaned;
       if (amountMatch) remainingText = remainingText.replace(amountMatch[0], "").replace(/\s+/g, " ").trim();
       if (dateMatch) remainingText = remainingText.replace(dateMatch[0], "").replace(/\s+/g, " ").trim();
       if (refNumberMatch) remainingText = remainingText.replace(refNumberMatch[0], "").replace(/\s+/g, " ").trim();
       if (otherDetailsMatch) remainingText = remainingText.replace(otherDetailsMatch[0], "").replace(/\s+/g, " ").trim();
-
       prioritizedText += remainingText;
-
       if (prioritizedText.length > 500) {
         prioritizedText = prioritizedText.substring(0, 500) + "...";
       }
-
       return prioritizedText || "No text available";
     };
 
-    // Main App Component
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [password, setPassword] = useState("");
@@ -186,7 +198,6 @@
       const [isLoading, setIsLoading] = useState(false);
       const [deletedSessions, setDeletedSessions] = useState([]);
 
-      // Load data from IndexedDB
       const loadData = async () => {
         const sessionsData = await db.paymentSessions.toArray();
         setSessions(sessionsData);
@@ -242,7 +253,6 @@
         setError("");
         const storedKey = await db.settings.get("passwordKey");
         const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 150000 }).toString();
-        
         if (!storedKey) {
           await db.settings.put({ key: "passwordKey", value: derivedKey });
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
@@ -297,7 +307,6 @@
 
       const openSession = async (sessionId) => {
         if (!sessionId) {
-          // When "Select a Session" is selected (only shown when no sessions exist), reset the workspace
           setCurrentSession(null);
           setStudents([]);
           setInvalidReceipts([]);
@@ -306,7 +315,6 @@
           setIsLoading(false);
           return;
         }
-
         const session = sessions.find(s => s.id === parseInt(sessionId));
         if (!session) {
           setError("Session not found");
@@ -454,34 +462,27 @@
               const data = result.data;
               const errors = [];
               const validStudents = [];
-
               const headers = result.meta.fields.map(h => 
                 h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase()
               );
               console.log(`Parsed headers: ${JSON.stringify(headers)}`);
-
               const requiredHeaders = ["name", "expected amount"];
               const nameHeader = headers.find(h => h === "name");
               const amountHeader = headers.find(h => h === "expected amount");
-
               if (!nameHeader || !amountHeader) {
                 setError("CSV must have 'Name' and 'Expected Amount' columns (case-insensitive)");
                 return;
               }
-
               const originalNameHeader = result.meta.fields[headers.indexOf("name")];
               const originalAmountHeader = result.meta.fields[headers.indexOf("expected amount")];
-
               for (let i = 0; i < data.length; i++) {
                 const row = data[i];
                 const name = row[originalNameHeader]?.trim();
                 const expectedAmount = parseFloat(row[originalAmountHeader]);
-
                 if (!name || isNaN(expectedAmount) || expectedAmount <= 0) {
                   errors.push(`Row ${i + 2}: Invalid name or amount`);
                   continue;
                 }
-
                 validStudents.push({
                   name,
                   expectedAmount: expectedAmount.toFixed(2),
@@ -492,7 +493,6 @@
                   sessionId: currentSession.id
                 });
               }
-
               if (validStudents.length > 0) {
                 const ids = await db.students.bulkAdd(validStudents, { allKeys: true });
                 const newStudents = validStudents.map((student, index) => ({
@@ -502,7 +502,6 @@
                 setStudents(prev => [...prev, ...newStudents]);
                 console.log(`Added ${newStudents.length} students from CSV`);
               }
-
               if (errors.length > 0) {
                 setError(`Added ${validStudents.length} students. Errors: ${errors.join("; ")}`);
               } else {
@@ -592,7 +591,6 @@
           if (!isValidPDF) {
             throw new Error("Invalid PDF format: File does not start with %PDF-");
           }
-
           const arrayBuffer = await file.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           for (let i = 1; i <= pdf.numPages; i++) {
@@ -601,7 +599,6 @@
             text += content.items.map(item => item.str).join(" ") + " ";
           }
           console.log(`Extracted text from ${file.name}: ${text.slice(0, 100)}...`);
-
           const nameRegex = students.map(s => new RegExp(`\\b${s.name}\\b`, "i"));
           const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
           const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
@@ -623,7 +620,6 @@
             console.log(`Extracted transaction date from ${file.name}: ${transactionDate}`);
           }
           console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}, Date=${transactionDate}`);
-
           let matchedStudent = null;
           if (matchedName) {
             matchedStudent = students.find(s => s.name.toLowerCase() === matchedName.toLowerCase());
@@ -633,21 +629,18 @@
             matchedStudent = BM25.match(filename, students);
             console.log(`BM25 match for ${filename}: ${matchedStudent ? matchedStudent.name : 'None'}`);
           }
-
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
             console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
             await db.invalidReceipts.delete(existingReceipt.id);
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
-
           const studentWithPDF = students.find(s => s.pdfFilename === file.name);
           if (studentWithPDF) {
             console.log(`PDF ${file.name} is already associated with student ${studentWithPDF.name}. Skipping.`);
             setPdfError(`PDF ${file.name} is already associated with ${studentWithPDF.name}.`);
             return;
           }
-
           if (!matchedStudent || !extractedAmount) {
             let reason = "No student matched";
             if (matchedStudent && !extractedAmount) {
@@ -670,7 +663,6 @@
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
-
           const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
           console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}, Date=${transactionDate}, PDF=${file.name}`);
           await db.students.update(matchedStudent.id, { 
@@ -692,7 +684,6 @@
           } else if (err.message.includes("Invalid PDF structure")) {
             userFriendlyMessage = "The PDF structure is invalid. Please upload a different file.";
           }
-          
           const reason = `Failed to process: ${userFriendlyMessage}`;
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
@@ -714,7 +705,6 @@
             data: text || "Unable to extract text",
             sessionId: currentSession.id 
           }]);
-          
           setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
         }
       };
@@ -813,20 +803,23 @@
 
       if (!isAuthenticated) {
         return (
-          <div className="min-h-screen flex items-center justify-center bg-gray-100">
-            <div className="bg-white p-6 rounded shadow-md w-full max-w-md">
-              <h1 className="text-2xl font-bold mb-4">Payment Tracker Login</h1>
-              {error && <p className="text-red-500 mb-4">{error}</p>}
+          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100">
+            <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md transform transition-all hover:scale-105">
+              <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Payment Tracker</h1>
+              {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
               <form onSubmit={handleLogin}>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
-                  className="w-full p-2 mb-4 border rounded"
+                  className="w-full p-3 mb-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                   required
                 />
-                <button type="submit" className="w-full bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200">
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 text-white p-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300"
+                >
                   Login
                 </button>
               </form>
@@ -836,44 +829,46 @@
       }
 
       return (
-        <div className="min-h-screen bg-gray-100 p-4">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-3xl font-bold">Payment Tracker</h1>
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex justify-between items-center mb-8">
+              <h1 className="text-4xl font-extrabold text-gray-800">Payment Tracker</h1>
               <button
                 onClick={handleLogout}
-                className="bg-red-400 text-white p-2 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                className="bg-red-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300"
               >
                 Logout
               </button>
             </div>
-            {error && <p className="text-red-500 mb-4">{error}</p>}
+            {error && (
+              <p className="text-red-500 bg-red-50 p-3 rounded-lg mb-6 animate-pulse">{error}</p>
+            )}
             {isLoading && (
-              <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+              <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500"></div>
               </div>
             )}
 
             {/* Session Management */}
-            <div className="bg-white p-6 rounded shadow-md mb-6">
-              <h2 className="text-xl font-bold mb-4">Payment Sessions</h2>
-              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+            <div className="bg-white p-6 rounded-2xl shadow-lg mb-8">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-6">Payment Sessions</h2>
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
                 <input
                   type="text"
                   value={newSessionName}
                   onChange={(e) => setNewSessionName(e.target.value)}
                   placeholder="New Session Name (e.g., Book Payments)"
-                  className="p-2 border rounded flex-1"
+                  className="p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 />
                 <button
                   onClick={createNewSession}
-                  className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200"
+                  className="bg-blue-600 text-white px-4 py-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300"
                 >
                   New Session
                 </button>
                 <select
                   onChange={(e) => openSession(e.target.value)}
-                  className="p-2 border rounded"
+                  className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                   value={currentSession ? currentSession.id : ""}
                 >
                   {sessions.length === 0 && (
@@ -886,7 +881,7 @@
                 {currentSession && (
                   <button
                     onClick={deleteSession}
-                    className="bg-red-400 text-white p-2 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                    className="bg-red-500 text-white px-4 py-3 rounded-lg shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300"
                   >
                     Delete Session
                   </button>
@@ -895,23 +890,23 @@
             </div>
 
             {/* Session Workspace Canvas */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+            <div className="bg-white border border-gray-100 rounded-2xl p-8 mb-8 shadow-lg">
               {currentSession && (
-                <h3 className="text-2xl font-bold text-center bg-blue-100 p-3 rounded mb-6">
+                <h3 className="text-3xl font-bold text-gray-800 text-center bg-blue-50 p-4 rounded-lg mb-8">
                   {currentSession.name}
                 </h3>
               )}
 
               {/* Add Student Form */}
-              <div className="bg-white p-6 rounded shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-4">Add Student</h2>
+              <div className="bg-gray-50 p-6 rounded-xl shadow-sm mb-8">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-6">Add Student</h2>
                 <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4 mb-6">
                   <input
                     type="text"
                     value={newStudent.name}
                     onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
                     placeholder="Student Name"
-                    className="p-2 border rounded flex-1"
+                    className="p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                     required
                   />
                   <input
@@ -921,22 +916,25 @@
                     placeholder="Expected Amount (RM)"
                     step="0.01"
                     min="0"
-                    className="p-2 border rounded flex-1"
+                    className="p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                     required
                   />
-                  <button type="submit" className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200">
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300"
+                  >
                     Add
                   </button>
                 </form>
                 <div
-                  className={`border-2 border-dashed rounded p-6 text-center ${
-                    isDraggingCSV ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
+                    isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
                   }`}
                   onDragOver={handleCSVDragOver}
                   onDragLeave={handleCSVDragLeave}
                   onDrop={handleCSVDrop}
                 >
-                  <p className="mb-4">Drag and drop a CSV file with student names and expected amounts, or click to select</p>
+                  <p className="mb-4 text-gray-600">Drag and drop a CSV file with student names and expected amounts, or click to select</p>
                   <input
                     type="file"
                     accept=".csv"
@@ -946,7 +944,7 @@
                   />
                   <label
                     htmlFor="csvInput"
-                    className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer"
                   >
                     Select CSV File
                   </label>
@@ -954,18 +952,18 @@
               </div>
 
               {/* PDF Upload with Drag-and-Drop */}
-              <div className="bg-white p-6 rounded shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-4">Upload Receipts</h2>
-                {pdfError && <p className="text-red-500 mb-4">{pdfError}</p>}
+              <div className="bg-gray-50 p-6 rounded-xl shadow-sm mb-8">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-6">Upload Receipts</h2>
+                {pdfError && <p className="text-red-500 bg-red-50 p-3 rounded-lg mb-4">{pdfError}</p>}
                 <div
-                  className={`border-2 border-dashed rounded p-6 text-center ${
-                    isDragging ? 'border-blue-500 bg-blue-100' : 'border-gray-300 bg-gray-50'
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
+                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
                   }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  <p className="mb-4">Drag and drop PDF files here or click to select</p>
+                  <p className="mb-4 text-gray-600">Drag and drop PDF files here or click to select</p>
                   <input
                     type="file"
                     accept=".pdf"
@@ -976,7 +974,7 @@
                   />
                   <label
                     htmlFor="fileInput"
-                    className="bg-blue-400 text-white p-2 rounded-md shadow-sm hover:bg-blue-500 hover:bg-opacity-80 transition-colors duration-200 cursor-pointer"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer"
                   >
                     Select Files
                   </label>
@@ -984,13 +982,13 @@
               </div>
 
               {/* Dashboard */}
-              <div className="bg-white p-6 rounded shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-4">Payment Status</h2>
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <div className="bg-gray-50 p-6 rounded-xl shadow-sm mb-8">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-6">Payment Status</h2>
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
                   <select
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
-                    className="p-2 border rounded"
+                    className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                   >
                     <option value="All">All</option>
                     <option value="Paid">Paid</option>
@@ -1001,7 +999,7 @@
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="p-2 border rounded"
+                    className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                   >
                     <option value="name-asc">Name (A-Z)</option>
                     <option value="name-desc">Name (Z-A)</option>
@@ -1010,122 +1008,172 @@
                   </select>
                   <button
                     onClick={exportToCSV}
-                    className="bg-green-400 text-white p-2 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
+                    className="bg-green-600 text-white px-4 py-3 rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300"
                   >
                     Export to CSV
                   </button>
                 </div>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-gray-200">
-                      <th className="border p-2">Name</th>
-                      <th className="border p-2">Expected Amount</th>
-                      <th className="border p-2">Paid Amount</th>
-                      <th className="border p-2">Transaction Date</th>
-                      <th className="border p-2">Status</th>
-                      <th className="border p-2">PDF File</th>
-                      <th className="border p-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredStudents.map(student => (
-                      <tr 
-                        key={student.id} 
-                        className={
-                          student.status === "Paid" 
-                            ? "bg-green-100 hover:bg-green-200" 
-                            : student.status === "Incorrect" 
-                            ? "bg-orange-100 hover:bg-orange-200" 
-                            : "bg-gray-100 hover:bg-gray-200"
-                        }
-                      >
-                        <td className="border p-2">{student.name}</td>
-                        <td className="border p-2">RM{student.expectedAmount}</td>
-                        <td className="border p-2">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
-                        <td className="border p-2">{student.transactionDate || "-"}</td>
-                        <td className="border p-2">{student.status}</td>
-                        <td className="border p-2">{student.pdfFilename || "-"}</td>
-                        <td className="border p-2 flex gap-2">
-                          <button
-                            onClick={() => {
-                              const newName = prompt("Enter new name", student.name);
-                              const newAmount = prompt("Enter new expected amount", student.expectedAmount);
-                              if (newName && newAmount) {
-                                editStudent(student.id, {
-                                  name: newName,
-                                  expectedAmount: newAmount
-                                });
-                              }
-                            }}
-                            className="bg-yellow-300 text-white p-1 rounded-md shadow-sm hover:bg-yellow-400 hover:bg-opacity-80 transition-colors duration-200"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => deleteStudent(student.id)}
-                            className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
-                          >
-                            Delete
-                          </button>
-                          {student.paidAmount && (
-                            <button
-                              onClick={() => deletePayment(student.id)}
-                              className="bg-gray-400 text-white p-1 rounded-md shadow-sm hover:bg-gray-500 hover:bg-opacity-80 transition-colors duration-200"
-                            >
-                              Clear Payment
-                            </button>
-                          )}
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Name</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Expected Amount</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Paid Amount</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Transaction Date</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Status</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">PDF File</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredStudents.map(student => (
+                        <tr 
+                          key={student.id} 
+                          className={
+                            student.status === "Paid" 
+                              ? "bg-green-50 hover:bg-green-100" 
+                              : student.status === "Incorrect" 
+                              ? "bg-orange-50 hover:bg-orange-100" 
+                              : "bg-white hover:bg-gray-50"
+                          }
+                        >
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.name}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">RM{student.expectedAmount}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.transactionDate || "-"}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.status}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.pdfFilename || "-"}</td>
+                          <td className="border-b border-gray-200 p-4 flex gap-2">
+                            <button
+                              onClick={() => {
+                                const newName = prompt("Enter new name", student.name);
+                                const newAmount = prompt("Enter new expected amount", student.expectedAmount);
+                                if (newName && newAmount) {
+                                  editStudent(student.id, {
+                                    name: newName,
+                                    expectedAmount: newAmount
+                                  });
+                                }
+                              }}
+                              className="bg-yellow-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deleteStudent(student.id)}
+                              className="bg-red-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300"
+                            >
+                              Delete
+                            </button>
+                            {student.paidAmount && (
+                              <button
+                                onClick={() => deletePayment(student.id)}
+                                className="bg-gray-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300"
+                              >
+                                Clear Payment
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
-                <div className="bg-white p-6 rounded shadow-md">
-                  <h2 className="text-xl font-bold mb-4">Invalid Receipts</h2>
+                <div className="bg-gray-50 p-6 rounded-xl shadow-sm">
+                  <h2 className="text-2xl font-semibold text-gray-800 mb-6">Invalid Receipts</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Filename</th>
+                          <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">PDF Content</th>
+                          <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Reason</th>
+                          <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Assign</th>
+                          <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invalidReceipts.map(receipt => (
+                          <tr key={receipt.id} className="hover:bg-gray-50">
+                            <td className="border-b border-gray-200 p-4 text-gray-700">{receipt.filename}</td>
+                            <td className="border-b border-gray-200 p-4 text-gray-700">
+                              <div className="text-sm text-gray-600 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
+                            </td>
+                            <td className="border-b border-gray-200 p-4 text-gray-700">{receipt.reason}</td>
+                            <td className="border-b border-gray-200 p-4 flex gap-2">
+                              <select
+                                className="p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                onChange={(e) => {
+                                  const amount = prompt("Enter amount");
+                                  if (amount) {
+                                    assignReceipt(receipt.id, e.target.value, amount);
+                                  }
+                                }}
+                              >
+                                <option value="">Select Student</option>
+                                {students.map(s => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="border-b border-gray-200 p-4">
+                              <button
+                                onClick={() => deleteInvalidReceipt(receipt.id)}
+                                className="bg-red-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Trash Bin */}
+            {deletedSessions.length > 0 && (
+              <div className="bg-gray-50 p-6 rounded-xl shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-semibold text-gray-800">Trash Bin</h2>
+                  <button
+                    onClick={clearTrashBin}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-700 hover:shadow-lg transition-all duration-300"
+                  >
+                    Clear Trash Bin
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-gray-200">
-                        <th className="border p-2">Filename</th>
-                        <th className="border p-2">PDF Content</th>
-                        <th className="border p-2">Reason</th>
-                        <th className="border p-2">Assign</th>
-                        <th className="border p-2">Actions</th>
+                      <tr className="bg-gray-100">
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Session Name</th>
+                        <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {invalidReceipts.map(receipt => (
-                        <tr key={receipt.id} className="hover:bg-gray-100">
-                          <td className="border p-2">{receipt.filename}</td>
-                          <td className="border p-2">
-                            <div className="text-sm text-gray-700 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
-                          </td>
-                          <td className="border p-2">{receipt.reason}</td>
-                          <td className="border p-2 flex gap-2">
-                            <select
-                              className="p-1 border rounded"
-                              onChange={(e) => {
-                                const amount = prompt("Enter amount");
-                                if (amount) {
-                                  assignReceipt(receipt.id, e.target.value, amount);
-                                }
-                              }}
-                            >
-                              <option value="">Select Student</option>
-                              {students.map(s => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="border p-2">
+                      {deletedSessions.map(session => (
+                        <tr key={session.id} className="hover:bg-gray-50">
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{session.name}</td>
+                          <td className="border-b border-gray-200 p-4 flex gap-2">
                             <button
-                              onClick={() => deleteInvalidReceipt(receipt.id)}
-                              className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
+                              onClick={() => restoreSession(session.id)}
+                              className="bg-green-600 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300"
                             >
-                              Delete
+                              Restore
+                            </button>
+                            <button
+                              onClick={() => permanentlyDeleteSession(session.id)}
+                              className="bg-red-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300"
+                            >
+                              Permanently Delete
                             </button>
                           </td>
                         </tr>
@@ -1133,50 +1181,6 @@
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-
-            {/* Trash Bin */}
-            {deletedSessions.length > 0 && (
-              <div className="bg-white p-6 rounded shadow-md">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold">Trash Bin</h2>
-                  <button
-                    onClick={clearTrashBin}
-                    className="bg-red-500 text-white p-2 rounded-md shadow-sm hover:bg-red-600 hover:bg-opacity-80 transition-colors duration-200"
-                  >
-                    Clear Trash Bin
-                  </button>
-                </div>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-gray-200">
-                      <th className="border p-2">Session Name</th>
-                      <th className="border p-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deletedSessions.map(session => (
-                      <tr key={session.id} className="hover:bg-gray-100">
-                        <td className="border p-2">{session.name}</td>
-                        <td className="border p-2 flex gap-2">
-                          <button
-                            onClick={() => restoreSession(session.id)}
-                            className="bg-green-400 text-white p-1 rounded-md shadow-sm hover:bg-green-500 hover:bg-opacity-80 transition-colors duration-200"
-                          >
-                            Restore
-                          </button>
-                          <button
-                            onClick={() => permanentlyDeleteSession(session.id)}
-                            className="bg-red-400 text-white p-1 rounded-md shadow-sm hover:bg-red-500 hover:bg-opacity-80 transition-colors duration-200"
-                          >
-                            Permanently Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             )}
           </div>
