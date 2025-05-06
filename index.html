@@ -91,11 +91,11 @@
 
     const db = new Dexie("PaymentTrackerDB");
     db.version(4).stores({
-      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
+      payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
       invalidReceipts: "++id,filename,reason,data,sessionId",
       settings: "key,value",
       paymentSessions: "++id,name",
-      deletedSessions: "++id,name,students,invalidReceipts"
+      deletedSessions: "++id,name,payers,invalidReceipts"
     });
 
     const BM25 = {
@@ -184,9 +184,9 @@
       const [password, setPassword] = useState("");
       const [error, setError] = useState("");
       const [pdfError, setPdfError] = useState("");
-      const [students, setStudents] = useState([]);
+      const [payers, setPayers] = useState([]);
       const [invalidReceipts, setInvalidReceipts] = useState([]);
-      const [newStudent, setNewStudent] = useState({ name: "", expectedAmount: "" });
+      const [newPayer, setNewPayer] = useState({ name: "", expectedAmount: "" });
       const [filter, setFilter] = useState("All");
       const [sortBy, setSortBy] = useState("name-asc");
       const [sessionTimeout, setSessionTimeout] = useState(null);
@@ -206,13 +206,13 @@
         if (sessionsData.length > 0) {
           const lastSession = sessionsData[sessionsData.length - 1];
           setCurrentSession(lastSession);
-          const studentsData = await db.students.where("sessionId").equals(lastSession.id).toArray();
+          const payersData = await db.payers.where("sessionId").equals(lastSession.id).toArray();
           const invalidData = await db.invalidReceipts.where("sessionId").equals(lastSession.id).toArray();
-          setStudents(studentsData.map(s => ({
-            ...s,
-            status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-            pdfFilename: s.pdfFilename || null,
-            transactionDate: s.transactionDate || null
+          setPayers(payersData.map(p => ({
+            ...p,
+            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: p.pdfFilename || null,
+            transactionDate: p.transactionDate || null
           })));
           setInvalidReceipts(invalidData);
         }
@@ -239,7 +239,7 @@
           setIsAuthenticated(false);
           await db.settings.delete("session");
           setError("Session timed out. Please log in again.");
-          setStudents([]);
+          setPayers([]);
           setInvalidReceipts([]);
           setSessions([]);
           setDeletedSessions([]);
@@ -277,7 +277,7 @@
         setIsAuthenticated(false);
         setError("");
         setPdfError("");
-        setStudents([]);
+        setPayers([]);
         setInvalidReceipts([]);
         setSessions([]);
         setDeletedSessions([]);
@@ -296,7 +296,7 @@
           const newSession = { ...session, id: sessionId };
           setSessions(prev => [...prev, newSession]);
           setCurrentSession(newSession);
-          setStudents([]);
+          setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
           setError("");
@@ -308,7 +308,7 @@
       const openSession = async (sessionId) => {
         if (!sessionId) {
           setCurrentSession(null);
-          setStudents([]);
+          setPayers([]);
           setInvalidReceipts([]);
           setError("");
           setPdfError("");
@@ -323,13 +323,13 @@
         setIsLoading(true);
         setTimeout(async () => {
           setCurrentSession(session);
-          const studentsData = await db.students.where("sessionId").equals(session.id).toArray();
+          const payersData = await db.payers.where("sessionId").equals(session.id).toArray();
           const invalidData = await db.invalidReceipts.where("sessionId").equals(session.id).toArray();
-          setStudents(studentsData.map(s => ({
-            ...s,
-            status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-            pdfFilename: s.pdfFilename || null,
-            transactionDate: s.transactionDate || null
+          setPayers(payersData.map(p => ({
+            ...p,
+            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: p.pdfFilename || null,
+            transactionDate: p.transactionDate || null
           })));
           setInvalidReceipts(invalidData);
           setError("");
@@ -346,26 +346,26 @@
         setIsLoading(true);
         setTimeout(async () => {
           const sessionId = currentSession.id;
-          const sessionStudents = await db.students.where("sessionId").equals(sessionId).toArray();
+          const sessionPayers = await db.payers.where("sessionId").equals(sessionId).toArray();
           const sessionInvalidReceipts = await db.invalidReceipts.where("sessionId").equals(sessionId).toArray();
           await db.deletedSessions.add({
             id: sessionId,
             name: currentSession.name,
-            students: sessionStudents,
+            payers: sessionPayers,
             invalidReceipts: sessionInvalidReceipts
           });
           await db.paymentSessions.delete(sessionId);
-          await db.students.where("sessionId").equals(sessionId).delete();
+          await db.payers.where("sessionId").equals(sessionId).delete();
           await db.invalidReceipts.where("sessionId").equals(sessionId).delete();
           setDeletedSessions(prev => [...prev, {
             id: sessionId,
             name: currentSession.name,
-            students: sessionStudents,
+            payers: sessionPayers,
             invalidReceipts: sessionInvalidReceipts
           }]);
           setSessions(prev => prev.filter(s => s.id !== sessionId));
           setCurrentSession(null);
-          setStudents([]);
+          setPayers([]);
           setInvalidReceipts([]);
           setError("Session moved to Trash Bin");
           setIsLoading(false);
@@ -382,10 +382,10 @@
             return;
           }
           await db.paymentSessions.add({ id: sessionId, name: deletedSession.name });
-          const studentsToRestore = deletedSession.students.map(s => ({ ...s, sessionId }));
+          const payersToRestore = deletedSession.payers.map(p => ({ ...p, sessionId }));
           const invalidReceiptsToRestore = deletedSession.invalidReceipts.map(r => ({ ...r, sessionId }));
-          if (studentsToRestore.length > 0) {
-            await db.students.bulkAdd(studentsToRestore);
+          if (payersToRestore.length > 0) {
+            await db.payers.bulkAdd(payersToRestore);
           }
           if (invalidReceiptsToRestore.length > 0) {
             await db.invalidReceipts.bulkAdd(invalidReceiptsToRestore);
@@ -394,11 +394,11 @@
           setSessions(prev => [...prev, { id: sessionId, name: deletedSession.name }]);
           setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
           setCurrentSession({ id: sessionId, name: deletedSession.name });
-          setStudents(studentsToRestore.map(s => ({
-            ...s,
-            status: s.status || (s.paidAmount ? (s.paidAmount === s.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-            pdfFilename: s.pdfFilename || null,
-            transactionDate: s.transactionDate || null
+          setPayers(payersToRestore.map(p => ({
+            ...p,
+            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: p.pdfFilename || null,
+            transactionDate: p.transactionDate || null
           })));
           setInvalidReceipts(invalidReceiptsToRestore);
           setError("Session restored successfully");
@@ -426,18 +426,18 @@
         }, 500);
       };
 
-      const addStudent = async (e) => {
+      const addPayer = async (e) => {
         e.preventDefault();
         if (!currentSession) {
           setError("Please create or select a session first");
           return;
         }
-        const { name, expectedAmount } = newStudent;
+        const { name, expectedAmount } = newPayer;
         if (!name.trim() || isNaN(expectedAmount) || expectedAmount <= 0) {
           setError("Invalid name or amount");
           return;
         }
-        const student = {
+        const payer = {
           name: name.trim(),
           expectedAmount: parseFloat(expectedAmount).toFixed(2),
           paidAmount: null,
@@ -446,9 +446,9 @@
           pdfFilename: null,
           sessionId: currentSession.id
         };
-        const id = await db.students.add(student);
-        setStudents(prev => [...prev, { ...student, id }]);
-        setNewStudent({ name: "", expectedAmount: "" });
+        const id = await db.payers.add(payer);
+        setPayers(prev => [...prev, { ...payer, id }]);
+        setNewPayer({ name: "", expectedAmount: "" });
       };
 
       const processCSV = async (file) => {
@@ -461,7 +461,7 @@
             complete: async (result) => {
               const data = result.data;
               const errors = [];
-              const validStudents = [];
+              const validPayers = [];
               const headers = result.meta.fields.map(h => 
                 h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase()
               );
@@ -483,7 +483,7 @@
                   errors.push(`Row ${i + 2}: Invalid name or amount`);
                   continue;
                 }
-                validStudents.push({
+                validPayers.push({
                   name,
                   expectedAmount: expectedAmount.toFixed(2),
                   paidAmount: null,
@@ -493,19 +493,19 @@
                   sessionId: currentSession.id
                 });
               }
-              if (validStudents.length > 0) {
-                const ids = await db.students.bulkAdd(validStudents, { allKeys: true });
-                const newStudents = validStudents.map((student, index) => ({
-                  ...student,
+              if (validPayers.length > 0) {
+                const ids = await db.payers.bulkAdd(validPayers, { allKeys: true });
+                const newPayers = validPayers.map((payer, index) => ({
+                  ...payer,
                   id: ids[index]
                 }));
-                setStudents(prev => [...prev, ...newStudents]);
-                console.log(`Added ${newStudents.length} students from CSV`);
+                setPayers(prev => [...prev, ...newPayers]);
+                console.log(`Added ${newPayers.length} payers from CSV`);
               }
               if (errors.length > 0) {
-                setError(`Added ${validStudents.length} students. Errors: ${errors.join("; ")}`);
+                setError(`Added ${validPayers.length} payers. Errors: ${errors.join("; ")}`);
               } else {
-                setError(`Successfully added ${validStudents.length} students`);
+                setError(`Successfully added ${validPayers.length} payers`);
               }
             },
             error: (err) => {
@@ -552,19 +552,19 @@
         handleCSVUpload(files);
       };
 
-      const editStudent = async (id, updatedStudent) => {
-        if (!updatedStudent.name.trim() || isNaN(updatedStudent.expectedAmount) || updatedStudent.expectedAmount <= 0) {
+      const editPayer = async (id, updatedPayer) => {
+        if (!updatedPayer.name.trim() || isNaN(updatedPayer.expectedAmount) || updatedPayer.expectedAmount <= 0) {
           setError("Invalid name or amount");
           return;
         }
-        updatedStudent.expectedAmount = parseFloat(updatedStudent.expectedAmount).toFixed(2);
-        await db.students.update(id, updatedStudent);
-        setStudents(prev => prev.map(s => (s.id === id ? { ...s, ...updatedStudent } : s)));
+        updatedPayer.expectedAmount = parseFloat(updatedPayer.expectedAmount).toFixed(2);
+        await db.payers.update(id, updatedPayer);
+        setPayers(prev => prev.map(p => (p.id === id ? { ...p, ...updatedPayer } : p)));
       };
 
-      const deleteStudent = async (id) => {
-        await db.students.delete(id);
-        setStudents(prev => prev.filter(s => s.id !== id));
+      const deletePayer = async (id) => {
+        await db.payers.delete(id);
+        setPayers(prev => prev.filter(p => p.id !== id));
       };
 
       const validatePDFFile = async (file) => {
@@ -599,7 +599,7 @@
             text += content.items.map(item => item.str).join(" ") + " ";
           }
           console.log(`Extracted text from ${file.name}: ${text.slice(0, 100)}...`);
-          const nameRegex = students.map(s => new RegExp(`\\b${s.name}\\b`, "i"));
+          const nameRegex = payers.map(p => new RegExp(`\\b${p.name}\\b`, "i"));
           const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
           const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
           const extractedText = text.toLowerCase();
@@ -607,7 +607,7 @@
           for (const regex of nameRegex) {
             const match = text.match(regex);
             if (match) {
-              matchedName = students.find(s => regex.test(s.name))?.name;
+              matchedName = payers.find(p => regex.test(p.name))?.name;
               break;
             }
           }
@@ -620,14 +620,14 @@
             console.log(`Extracted transaction date from ${file.name}: ${transactionDate}`);
           }
           console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}, Date=${transactionDate}`);
-          let matchedStudent = null;
+          let matchedPayer = null;
           if (matchedName) {
-            matchedStudent = students.find(s => s.name.toLowerCase() === matchedName.toLowerCase());
-            console.log(`Matched by name: ${matchedStudent ? matchedStudent.name : 'None'}`);
+            matchedPayer = payers.find(p => p.name.toLowerCase() === matchedName.toLowerCase());
+            console.log(`Matched by name: ${matchedPayer ? matchedPayer.name : 'None'}`);
           } else {
             const filename = file.name.replace(".pdf", "");
-            matchedStudent = BM25.match(filename, students);
-            console.log(`BM25 match for ${filename}: ${matchedStudent ? matchedStudent.name : 'None'}`);
+            matchedPayer = BM25.match(filename, payers);
+            console.log(`BM25 match for ${filename}: ${matchedPayer ? matchedPayer.name : 'None'}`);
           }
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
@@ -635,15 +635,15 @@
             await db.invalidReceipts.delete(existingReceipt.id);
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
-          const studentWithPDF = students.find(s => s.pdfFilename === file.name);
-          if (studentWithPDF) {
-            console.log(`PDF ${file.name} is already associated with student ${studentWithPDF.name}. Skipping.`);
-            setPdfError(`PDF ${file.name} is already associated with ${studentWithPDF.name}.`);
+          const payerWithPDF = payers.find(p => p.pdfFilename === file.name);
+          if (payerWithPDF) {
+            console.log(`PDF ${file.name} is already associated with payer ${payerWithPDF.name}. Skipping.`);
+            setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`);
             return;
           }
-          if (!matchedStudent || !extractedAmount) {
-            let reason = "No student matched";
-            if (matchedStudent && !extractedAmount) {
+          if (!matchedPayer || !extractedAmount) {
+            let reason = "No payer matched";
+            if (matchedPayer && !extractedAmount) {
               reason = "No amount found in PDF";
             }
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
@@ -663,16 +663,16 @@
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
-          const status = extractedAmount.toFixed(2) === matchedStudent.expectedAmount ? "Paid" : "Incorrect";
-          console.log(`Updating student ${matchedStudent.name}: Status=${status}, Amount=${extractedAmount}, Date=${transactionDate}, PDF=${file.name}`);
-          await db.students.update(matchedStudent.id, { 
+          const status = extractedAmount.toFixed(2) === matchedPayer.expectedAmount ? "Paid" : "Incorrect";
+          console.log(`Updating payer ${matchedPayer.name}: Status=${status}, Amount=${extractedAmount}, Date=${transactionDate}, PDF=${file.name}`);
+          await db.payers.update(matchedPayer.id, { 
             paidAmount: extractedAmount.toFixed(2), 
             transactionDate: transactionDate,
             status, 
             pdfFilename: file.name 
           });
-          setStudents(prev => prev.map(s => 
-            s.id === matchedStudent.id ? { ...s, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : s
+          setPayers(prev => prev.map(p => 
+            p.id === matchedPayer.id ? { ...p, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : p
           ));
         } catch (err) {
           console.error(`Error processing ${file.name}:`, err);
@@ -738,32 +738,32 @@
         handleFileUpload(files);
       };
 
-      const assignReceipt = async (receiptId, studentId, amount) => {
-        if (!studentId || isNaN(amount) || amount <= 0) {
-          setError("Invalid student or amount");
+      const assignReceipt = async (receiptId, payerId, amount) => {
+        if (!payerId || isNaN(amount) || amount <= 0) {
+          setError("Invalid payer or amount");
           return;
         }
-        const student = students.find(s => s.id === parseInt(studentId));
+        const payer = payers.find(p => p.id === parseInt(payerId));
         const receipt = invalidReceipts.find(r => r.id === receiptId);
-        const status = parseFloat(amount).toFixed(2) === student.expectedAmount ? "Paid" : "Incorrect";
-        await db.students.update(student.id, { 
+        const status = parseFloat(amount).toFixed(2) === payer.expectedAmount ? "Paid" : "Incorrect";
+        await db.payers.update(payer.id, { 
           paidAmount: parseFloat(amount).toFixed(2), 
           transactionDate: null,
           status, 
           pdfFilename: receipt.filename 
         });
         await db.invalidReceipts.delete(receiptId);
-        setStudents(prev => prev.map(s => 
-          s.id === student.id ? { ...s, paidAmount: parseFloat(amount).toFixed(2), transactionDate: null, status, pdfFilename: receipt.filename } : s
+        setPayers(prev => prev.map(p => 
+          p.id === payer.id ? { ...p, paidAmount: parseFloat(amount).toFixed(2), transactionDate: null, status, pdfFilename: receipt.filename } : p
         ));
         setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
         setPdfError("");
       };
 
       const deletePayment = async (id) => {
-        await db.students.update(id, { paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null });
-        setStudents(prev => prev.map(s => 
-          s.id === id ? { ...s, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : s
+        await db.payers.update(id, { paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null });
+        setPayers(prev => prev.map(p => 
+          p.id === id ? { ...p, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : p
         ));
       };
 
@@ -774,13 +774,13 @@
 
       const exportToCSV = () => {
         const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
-        const rows = students.map(s => [
-          s.name,
-          s.expectedAmount,
-          s.paidAmount || "",
-          s.transactionDate || "",
-          s.status,
-          s.pdfFilename || ""
+        const rows = payers.map(p => [
+          p.name,
+          p.expectedAmount,
+          p.paidAmount || "",
+          p.transactionDate || "",
+          p.status,
+          p.pdfFilename || ""
         ]);
         const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
@@ -792,13 +792,13 @@
         URL.revokeObjectURL(url);
       };
 
-      const filteredStudents = students.filter(s => 
-        filter === "All" || s.status === filter
+      const filteredPayers = payers.filter(p => 
+        filter === "All" || p.status === filter
       ).sort((a, b) => {
         if (sortBy === "name-asc") return a.name.localeCompare(b.name);
         if (sortBy === "name-desc") return b.name.localeCompare(a.name);
         if (sortBy === "status-asc") return a.status.localeCompare(b.status);
-        if (sortBy === "status-desc") return b.status.localeCompare(a.status);
+        if (sortBy === "status-desc") return b.status.localeCompare(b.status);
       });
 
       if (!isAuthenticated) {
@@ -897,22 +897,22 @@
                 </h3>
               )}
 
-              {/* Add Student Form */}
+              {/* Add Payer Form */}
               <div className="bg-gray-50 p-6 rounded-xl shadow-sm mb-8">
-                <h2 className="text-2xl font-semibold text-gray-800 mb-6">Add Student</h2>
-                <form onSubmit={addStudent} className="flex flex-col sm:flex-row gap-4 mb-6">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-6">Add Payer</h2>
+                <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-4 mb-6">
                   <input
                     type="text"
-                    value={newStudent.name}
-                    onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                    placeholder="Student Name"
+                    value={newPayer.name}
+                    onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })}
+                    placeholder="Payer Name"
                     className="p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                     required
                   />
                   <input
                     type="number"
-                    value={newStudent.expectedAmount}
-                    onChange={(e) => setNewStudent({ ...newStudent, expectedAmount: e.target.value })}
+                    value={newPayer.expectedAmount}
+                    onChange={(e) => setNewPayer({ ...newPayer, expectedAmount: e.target.value })}
                     placeholder="Expected Amount (RM)"
                     step="0.01"
                     min="0"
@@ -934,7 +934,7 @@
                   onDragLeave={handleCSVDragLeave}
                   onDrop={handleCSVDrop}
                 >
-                  <p className="mb-4 text-gray-600">Drag and drop a CSV file with student names and expected amounts, or click to select</p>
+                  <p className="mb-4 text-gray-600">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
                   <input
                     type="file"
                     accept=".csv"
@@ -1027,30 +1027,30 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredStudents.map(student => (
+                      {filteredPayers.map(payer => (
                         <tr 
-                          key={student.id} 
+                          key={payer.id} 
                           className={
-                            student.status === "Paid" 
+                            payer.status === "Paid" 
                               ? "bg-green-50 hover:bg-green-100" 
-                              : student.status === "Incorrect" 
+                              : payer.status === "Incorrect" 
                               ? "bg-orange-50 hover:bg-orange-100" 
                               : "bg-white hover:bg-gray-50"
                           }
                         >
-                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.name}</td>
-                          <td className="border-b border-gray-200 p-4 text-gray-700">RM{student.expectedAmount}</td>
-                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.paidAmount ? `RM${student.paidAmount}` : "-"}</td>
-                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.transactionDate || "-"}</td>
-                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.status}</td>
-                          <td className="border-b border-gray-200 p-4 text-gray-700">{student.pdfFilename || "-"}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{payer.name}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">RM{payer.expectedAmount}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{payer.transactionDate || "-"}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{payer.status}</td>
+                          <td className="border-b border-gray-200 p-4 text-gray-700">{payer.pdfFilename || "-"}</td>
                           <td className="border-b border-gray-200 p-4 flex gap-2">
                             <button
                               onClick={() => {
-                                const newName = prompt("Enter new name", student.name);
-                                const newAmount = prompt("Enter new expected amount", student.expectedAmount);
+                                const newName = prompt("Enter new name", payer.name);
+                                const newAmount = prompt("Enter new expected amount", payer.expectedAmount);
                                 if (newName && newAmount) {
-                                  editStudent(student.id, {
+                                  editPayer(payer.id, {
                                     name: newName,
                                     expectedAmount: newAmount
                                   });
@@ -1061,14 +1061,14 @@
                               Edit
                             </button>
                             <button
-                              onClick={() => deleteStudent(student.id)}
+                              onClick={() => deletePayer(payer.id)}
                               className="bg-red-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300"
                             >
                               Delete
                             </button>
-                            {student.paidAmount && (
+                            {payer.paidAmount && (
                               <button
-                                onClick={() => deletePayment(student.id)}
+                                onClick={() => deletePayment(payer.id)}
                                 className="bg-gray-500 text-white px-3 py-1 rounded-lg shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300"
                               >
                                 Clear Payment
@@ -1115,9 +1115,9 @@
                                   }
                                 }}
                               >
-                                <option value="">Select Student</option>
-                                {students.map(s => (
-                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                <option value="">Select Payer</option>
+                                {payers.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
                                 ))}
                               </select>
                             </td>
