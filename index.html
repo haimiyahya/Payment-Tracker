@@ -260,6 +260,35 @@
       }
     };
 
+    function ImageModal({ isOpen, onClose, imageSrc }) {
+      if (!isOpen || !imageSrc) return null;
+
+      return (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={onClose}
+        >
+          <div 
+            className="bg-white p-6 rounded-2xl shadow-xl max-w-2xl w-full relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-2 right-2 text-gray-600 hover:text-gray-800 text-2xl"
+            >
+              &times;
+            </button>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Receipt Preview</h3>
+            <img 
+              src={imageSrc} 
+              alt="Receipt Preview" 
+              className="max-w-full h-auto rounded shadow-sm"
+            />
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [password, setPassword] = useState("");
@@ -278,6 +307,18 @@
       const [newSessionName, setNewSessionName] = useState("");
       const [isLoading, setIsLoading] = useState(false);
       const [deletedSessions, setDeletedSessions] = useState([]);
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [selectedImage, setSelectedImage] = useState(null);
+
+      const openModal = (imageSrc) => {
+        setSelectedImage(imageSrc);
+        setIsModalOpen(true);
+      };
+
+      const closeModal = () => {
+        setIsModalOpen(false);
+        setSelectedImage(null);
+      };
 
       const loadData = async () => {
         const sessionsData = await db.paymentSessions.toArray();
@@ -663,7 +704,7 @@
       const processPDF = async (file) => {
         if (!currentSession) {
           setError("Please create or select a session first");
-          return UNDERSCORE
+          return;
         }
         console.log(`Processing PDF: ${file.name}`);
         let text = "";
@@ -1197,7 +1238,13 @@
                             </td>
                             <td className="border-b border-gray-200 p-4 text-gray-700">
                               {receipt.pngData ? (
-                                <img src={receipt.pngData} alt="PDF Preview" className="max-w-[200px] h-auto rounded shadow-sm" />
+                                <img 
+                                  src={receipt.pngData} 
+                                  alt="PDF Preview" 
+                                  className="max-w-[200px] h-auto rounded shadow-sm cursor-pointer"
+                                  onMouseEnter={() => openModal(receipt.pngData)}
+                                  onClick={() => openModal(receipt.pngData)}
+                                />
                               ) : (
                                 <span className="text-gray-500">No preview available</span>
                               )}
@@ -1234,6 +1281,12 @@
                   </div>
                 </div>
               )}
+
+              <ImageModal 
+                isOpen={isModalOpen}
+                onClose={closeModal}
+                imageSrc={selectedImage}
+              />
             </div>
 
             {/* Trash Bin */}
