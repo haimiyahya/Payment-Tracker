@@ -91,11 +91,44 @@
 
     const db = new Dexie("PaymentTrackerDB");
     db.version(4).stores({
+      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
+      invalidReceipts: "++id,filename,reason,data,sessionId",
+      settings: "key,value",
+      paymentSessions: "++id,name",
+      deletedSessions: "++id,name,students,invalidReceipts"
+    });
+    db.version(5).stores({
       payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
       invalidReceipts: "++id,filename,reason,data,sessionId",
       settings: "key,value",
       paymentSessions: "++id,name",
       deletedSessions: "++id,name,payers,invalidReceipts"
+    }).upgrade(async (tx) => {
+      console.log("Upgrading database from version 4 to 5");
+      try {
+        const students = await tx.table("students").toArray();
+        if (students.length > 0) {
+          console.log(`Migrating ${students.length} students to payers`);
+          await tx.table("payers").bulkAdd(students);
+          console.log("Migration completed: students copied to payers");
+        }
+        const deletedSessions = await tx.table("deletedSessions").toArray();
+        if (deletedSessions.length > 0) {
+          console.log(`Updating ${deletedSessions.length} deleted sessions`);
+          await tx.table("deletedSessions").bulkPut(
+            deletedSessions.map(session => ({
+              ...session,
+              payers: session.students || [],
+              students: undefined
+            }))
+          );
+          console.log("Migration completed: updated deletedSessions");
+        }
+        await tx.table("students").clear();
+        console.log("Cleared old students table");
+      } catch (err) {
+        console.error("Error during database migration:", err);
+      }
     });
 
     const BM25 = {
@@ -796,7 +829,7 @@
         filter === "All" || p.status === filter
       ).sort((a, b) => {
         if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-        if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+        if (sortBy === "name-desc") return b.name.localeCompare(b.name);
         if (sortBy === "status-asc") return a.status.localeCompare(b.status);
         if (sortBy === "status-desc") return b.status.localeCompare(b.status);
       });
@@ -961,7 +994,7 @@
                   }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
+                  onDropington={handleDrop}
                 >
                   <p className="mb-4 text-gray-600">Drag and drop PDF files here or click to select</p>
                   <input
