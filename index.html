@@ -130,6 +130,30 @@
         console.error("Error during database migration:", err);
       }
     });
+    db.version(6).stores({
+      payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
+      invalidReceipts: "++id,filename,reason,data,pngData,sessionId",
+      settings: "key,value",
+      paymentSessions: "++id,name",
+      deletedSessions: "++id,name,payers,invalidReceipts"
+    }).upgrade(async (tx) => {
+      console.log("Upgrading database from version 5 to 6");
+      try {
+        const invalidReceipts = await tx.table("invalidReceipts").toArray();
+        if (invalidReceipts.length > 0) {
+          console.log(`Updating ${invalidReceipts.length} invalid receipts to include pngData`);
+          await tx.table("invalidReceipts").bulkPut(
+            invalidReceipts.map(receipt => ({
+              ...receipt,
+              pngData: null
+            }))
+          );
+          console.log("Migration completed: added pngData to invalidReceipts");
+        }
+      } catch (err) {
+        console.error("Error during database migration to version 6:", err);
+      }
+    });
 
     const BM25 = {
       k1: 1.5,
@@ -210,6 +234,30 @@
         prioritizedText = prioritizedText.substring(0, 500) + "...";
       }
       return prioritizedText || "No text available";
+    };
+
+    const convertPDFToPNG = async (file) => {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.0 });
+        const scale = 200 / viewport.width;
+        const scaledViewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = scaledViewport.width;
+        canvas.height = scaledViewport.height;
+        const context = canvas.getContext("2d");
+        await page.render({
+          canvasContext: context,
+          viewport: scaledViewport
+        }).promise;
+        const pngData = canvas.toDataURL("image/png");
+        return pngData;
+      } catch (err) {
+        console.error(`Error converting PDF ${file.name} to PNG:`, err);
+        return null;
+      }
     };
 
     function App() {
@@ -619,6 +667,7 @@
         }
         console.log(`Processing PDF: ${file.name}`);
         let text = "";
+        let pngData = null;
         try {
           const isValidPDF = await validatePDFFile(file);
           if (!isValidPDF) {
@@ -679,11 +728,14 @@
             if (matchedPayer && !extractedAmount) {
               reason = "No amount found in PDF";
             }
+            console.log(`Generating PNG for invalid receipt: ${file.name}`);
+            pngData = await convertPDFToPNG(file);
             console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
             const id = await db.invalidReceipts.add({ 
               filename: file.name, 
               reason, 
               data: text || "Unable to extract text",
+              pngData,
               sessionId: currentSession.id 
             });
             setInvalidReceipts(prev => [...prev, { 
@@ -691,6 +743,7 @@
               filename: file.name, 
               reason, 
               data: text || "Unable to extract text",
+              pngData,
               sessionId: currentSession.id 
             }]);
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
@@ -718,6 +771,8 @@
             userFriendlyMessage = "The PDF structure is invalid. Please upload a different file.";
           }
           const reason = `Failed to process: ${userFriendlyMessage}`;
+          console.log(`Generating PNG for invalid receipt: ${file.name}`);
+          pngData = await convertPDFToPNG(file);
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
             console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
@@ -729,6 +784,7 @@
             filename: file.name, 
             reason, 
             data: text || "Unable to extract text",
+            pngData,
             sessionId: currentSession.id 
           });
           setInvalidReceipts(prev => [...prev, { 
@@ -736,6 +792,7 @@
             filename: file.name, 
             reason, 
             data: text || "Unable to extract text",
+            pngData,
             sessionId: currentSession.id 
           }]);
           setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
@@ -994,7 +1051,7 @@
                   }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onDropington={handleDrop}
+                  onDrop={handleDrop}
                 >
                   <p className="mb-4 text-gray-600">Drag and drop PDF files here or click to select</p>
                   <input
@@ -1125,6 +1182,7 @@
                         <tr className="bg-gray-100">
                           <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Filename</th>
                           <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">PDF Content</th>
+                          <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Preview</th>
                           <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Reason</th>
                           <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Assign</th>
                           <th className="border-b border-gray-200 p-4 text-left text-gray-700 font-semibold">Actions</th>
@@ -1136,6 +1194,13 @@
                             <td className="border-b border-gray-200 p-4 text-gray-700">{receipt.filename}</td>
                             <td className="border-b border-gray-200 p-4 text-gray-700">
                               <div className="text-sm text-gray-600 whitespace-pre-wrap">{formatPDFText(receipt.data)}</div>
+                            </td>
+                            <td className="border-b border-gray-200 p-4 text-gray-700">
+                              {receipt.pngData ? (
+                                <img src={receipt.pngData} alt="PDF Preview" className="max-w-[200px] h-auto rounded shadow-sm" />
+                              ) : (
+                                <span className="text-gray-500">No preview available</span>
+                              )}
                             </td>
                             <td className="border-b border-gray-200 p-4 text-gray-700">{receipt.reason}</td>
                             <td className="border-b border-gray-200 p-4 flex gap-2">
