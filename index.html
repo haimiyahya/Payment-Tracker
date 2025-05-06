@@ -296,6 +296,17 @@
       };
 
       const openSession = async (sessionId) => {
+        if (!sessionId) {
+          // When "Select a Session" is selected (only shown when no sessions exist), reset the workspace
+          setCurrentSession(null);
+          setStudents([]);
+          setInvalidReceipts([]);
+          setError("");
+          setPdfError("");
+          setIsLoading(false);
+          return;
+        }
+
         const session = sessions.find(s => s.id === parseInt(sessionId));
         if (!session) {
           setError("Session not found");
@@ -865,7 +876,9 @@
                   className="p-2 border rounded"
                   value={currentSession ? currentSession.id : ""}
                 >
-                  <option value="">Select a Session</option>
+                  {sessions.length === 0 && (
+                    <option value="">Select a Session</option>
+                  )}
                   {sessions.map(session => (
                     <option key={session.id} value={session.id}>{session.name}</option>
                   ))}
