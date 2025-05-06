@@ -242,7 +242,7 @@
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(1);
         const viewport = page.getViewport({ scale: 1.0 });
-        const scale = 200 / viewport.width;
+        const scale = 400 / viewport.width;
         const scaledViewport = page.getViewport({ scale });
         const canvas = document.createElement("canvas");
         canvas.width = scaledViewport.width;
@@ -663,7 +663,7 @@
       const processPDF = async (file) => {
         if (!currentSession) {
           setError("Please create or select a session first");
-          return;
+          return UNDERSCORE
         }
         console.log(`Processing PDF: ${file.name}`);
         let text = "";
