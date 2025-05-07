@@ -517,7 +517,6 @@
           setError("Please enter a session name");
           return;
         }
-        // Check for duplicate session names
         const sessionNameLower = newSessionName.trim().toLowerCase();
         const existingSession = sessions.find(s => s.name.toLowerCase() === sessionNameLower);
         if (existingSession) {
@@ -525,7 +524,7 @@
           return;
         }
         setIsLoading(true);
-        setError(""); // Clear any previous error before proceeding
+        setError("");
         setTimeout(async () => {
           const session = { name: newSessionName.trim() };
           const sessionId = await db.paymentSessions.add(session);
@@ -597,10 +596,33 @@
             payers: sessionPayers,
             invalidReceipts: sessionInvalidReceipts
           }]);
-          setSessions(prev => prev.filter(s => s.id !== sessionId));
+          
+          // Update sessions state after deletion
+          const updatedSessions = sessions.filter(s => s.id !== sessionId);
+          setSessions(updatedSessions);
+          
+          // Select the next available session (or none if no sessions remain)
+          let nextSession = null;
+          if (updatedSessions.length > 0) {
+            // Find the session that was previously loaded or the last one
+            nextSession = updatedSessions[updatedSessions.length - 1]; // Default to the last session
+            // If "beli buku agama" exists, prioritize it (based on your description)
+            const beliBukuAgama = updatedSessions.find(s => s.name.toLowerCase() === "beli buku agama");
+            if (beliBukuAgama) {
+              nextSession = beliBukuAgama;
+            }
+          }
+          
+          // Set the current session to null temporarily to ensure UI updates
           setCurrentSession(null);
           setPayers([]);
           setInvalidReceipts([]);
+          
+          // Load the next session if it exists
+          if (nextSession) {
+            await openSession(nextSession.id);
+          }
+          
           setError("Session moved to Trash Bin");
           setIsLoading(false);
         }, 500);
