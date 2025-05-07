@@ -51,6 +51,8 @@
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="text-xs">
@@ -525,7 +527,7 @@
       };
 
       const closeSessionsModal = () => {
-        if (sessions.length === 0 && !currentSession) return; // Prevent closing if no session
+        if (sessions.length === 0 && !currentSession) return;
         setIsSessionsModalOpen(false);
       };
 
@@ -547,7 +549,7 @@
           })));
           setInvalidReceipts(invalidData);
         } else {
-          setIsSessionsModalOpen(true); // Open modal if no sessions exist
+          setIsSessionsModalOpen(true);
         }
       };
 
@@ -589,7 +591,7 @@
           setSessions([]);
           setDeletedSessions([]);
           setCurrentSession(null);
-          setIsSessionsModalOpen(true); // Reopen modal on timeout
+          setIsSessionsModalOpen(true);
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
       };
@@ -628,7 +630,7 @@
         setSessions([]);
         setDeletedSessions([]);
         setCurrentSession(null);
-        setIsSessionsModalOpen(true); // Reopen modal on logout
+        setIsSessionsModalOpen(true);
       };
 
       const createNewSession = async () => {
@@ -653,7 +655,7 @@
           setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
-          setIsSessionsModalOpen(false); // Close modal after successful creation
+          setIsSessionsModalOpen(false);
           setIsLoading(false);
         }, 500);
       };
@@ -716,10 +718,8 @@
             payers: sessionPayers,
             invalidReceipts: sessionInvalidReceipts
           }]);
-          
           const updatedSessions = sessions.filter(s => s.id !== sessionId);
           setSessions(updatedSessions);
-          
           let nextSession = null;
           if (updatedSessions.length > 0) {
             nextSession = updatedSessions[updatedSessions.length - 1];
@@ -728,17 +728,14 @@
               nextSession = beliBukuAgama;
             }
           }
-          
           setCurrentSession(null);
           setPayers([]);
           setInvalidReceipts([]);
-          
           if (nextSession) {
             await openSession(nextSession.id);
           } else {
-            setIsSessionsModalOpen(true); // Reopen modal if no sessions remain
+            setIsSessionsModalOpen(true);
           }
-          
           setError("Session moved to Trash Bin");
           setIsLoading(false);
         }, 500);
@@ -1173,6 +1170,51 @@
         URL.revokeObjectURL(url);
       };
 
+      const exportToPDF = () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Header
+        doc.setFontSize(16);
+        doc.text("Payment Tracker - Payment Status", 14, 20);
+        doc.setFontSize(12);
+        doc.text(`Session: ${currentSession ? currentSession.name : "Unnamed"}`, 14, 30);
+        doc.text(`Exported on: ${new Date().toLocaleString()}`, 14, 40);
+        
+        // Table
+        const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
+        const rows = filteredPayers.map(p => [
+          p.name,
+          `RM${p.expectedAmount}`,
+          p.paidAmount ? `RM${p.paidAmount}` : "-",
+          p.transactionDate || "-",
+          p.status,
+          p.pdfFilename || "-"
+        ]);
+        
+        doc.autoTable({
+          startY: 50,
+          head: [headers],
+          body: rows,
+          theme: "grid",
+          styles: { fontSize: 8, cellPadding: 2 },
+          columnStyles: {
+            0: { cellWidth: 40 }, // Name
+            1: { cellWidth: 30 }, // Expected Amount
+            2: { cellWidth: 30 }, // Paid Amount
+            3: { cellWidth: 40 }, // Transaction Date
+            4: { cellWidth: 30 }, // Status
+            5: { cellWidth: 40 }  // PDF File
+          },
+          margin: { top: 50, left: 14, right: 14 }
+        });
+        
+        // Save
+        const sessionName = currentSession ? currentSession.name.replace(/\s+/g, "_") : "unnamed";
+        const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        doc.save(`payment_status_${sessionName}_${date}.pdf`);
+      };
+
       const filteredPayers = payers.filter(p => 
         filter === "All" || p.status === filter
       ).sort((a, b) => {
@@ -1228,7 +1270,6 @@
               </div>
             )}
 
-            {/* Session Workspace Canvas */}
             <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
               {currentSession && (
                 <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
@@ -1236,7 +1277,6 @@
                 </h3>
               )}
 
-              {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
                 <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1290,7 +1330,6 @@
                 </div>
               </div>
 
-              {/* PDF Upload with Drag-and-Drop */}
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
@@ -1320,7 +1359,6 @@
                 </div>
               </div>
 
-              {/* Dashboard */}
               <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
                 <div className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1351,6 +1389,12 @@
                   >
                     Export to CSV
                   </button>
+                  <button
+                    onClick={exportToPDF}
+                    className="bg-purple-600 text-white px-2 py-1 rounded shadow-md hover:bg-purple-700 hover:shadow-lg transition-all duration-300 text-xs"
+                  >
+                    Export to PDF
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
@@ -1380,7 +1424,7 @@
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.name}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
-                          <td className=" مرز-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.status}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
                           <td className="border-b border-gray-200 p-1 flex flex-wrap gap-1">
@@ -1421,7 +1465,6 @@
                 </div>
               </div>
 
-              {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
                 <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
                   <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
