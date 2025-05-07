@@ -290,12 +290,115 @@
       );
     }
 
-    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection }) {
+    function SessionsModal({ isOpen, onClose, sessions, deletedSessions, currentSession, setSessions, setDeletedSessions, setCurrentSession, setPayers, setInvalidReceipts, setError, setIsLoading, newSessionName, setNewSessionName, openSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, clearTrashBin }) {
+      if (!isOpen) return null;
+
+      return (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={onClose}
+        >
+          <div 
+            className="bg-white p-3 rounded-lg shadow-xl max-w-lg w-full relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
+            >
+              ×
+            </button>
+            <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Sessions</h2>
+            <div className="flex flex-col sm:flex-row gap-1 mb-2">
+              <input
+                type="text"
+                value={newSessionName}
+                onChange={(e) => setNewSessionName(e.target.value)}
+                placeholder="New Session Name (e.g., Book Payments)"
+                className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+              />
+              <button
+                onClick={createNewSession}
+                className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+              >
+                New Session
+              </button>
+              <select
+                onChange={(e) => openSession(e.target.value)}
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                value={currentSession ? currentSession.id : ""}
+              >
+                {sessions.length === 0 && (
+                  <option value="">Select a Session</option>
+                )}
+                {sessions.map(session => (
+                  <option key={session.id} value={session.id}>{session.name}</option>
+                ))}
+              </select>
+              {currentSession && (
+                <button
+                  onClick={deleteSession}
+                  className="bg-red-500 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
+                >
+                  Delete Session
+                </button>
+              )}
+            </div>
+            {deletedSessions.length > 0 && (
+              <div id="trash-bin" className="bg-gray-50 p-3 rounded-lg shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-base font-semibold text-gray-800">Trash Bin</h2>
+                  <button
+                    onClick={clearTrashBin}
+                    className="bg-red-600 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
+                  >
+                    Clear Trash Bin
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Session Name</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deletedSessions.map(session => (
+                        <tr key={session.id} className="hover:bg-gray-50">
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{session.name}</td>
+                          <td className="border-b border-gray-200 p-1 flex gap-1">
+                            <button
+                              onClick={() => restoreSession(session.id)}
+                              className="bg-green-600 text-white px-1 py-1 rounded shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs"
+                            >
+                              Restore
+                            </button>
+                            <button
+                              onClick={() => permanentlyDeleteSession(session.id)}
+                              className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                            >
+                              Permanently Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal }) {
       const [isOpen, setIsOpen] = useState(false);
 
       const navItems = [
         { name: "Home", section: "dashboard" },
-        { name: "Sessions", section: "sessions" },
+        { name: "Sessions", action: openSessionsModal },
         { name: "Add Payer", section: "add-payer" },
         { name: "Upload Receipts", section: "upload-receipts" },
         { name: "Invalid Receipts", section: "invalid-receipts" },
@@ -402,6 +505,7 @@
       const [deletedSessions, setDeletedSessions] = useState([]);
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [selectedImage, setSelectedImage] = useState(null);
+      const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
 
       const openModal = (imageSrc) => {
         setSelectedImage(imageSrc);
@@ -411,6 +515,14 @@
       const closeModal = () => {
         setIsModalOpen(false);
         setSelectedImage(null);
+      };
+
+      const openSessionsModal = () => {
+        setIsSessionsModalOpen(true);
+      };
+
+      const closeSessionsModal = () => {
+        setIsSessionsModalOpen(false);
       };
 
       const loadData = async () => {
@@ -436,7 +548,7 @@
       const scrollToSection = (sectionId) => {
         const element = document.getElementById(sectionId);
         if (element) {
-          const navHeight = 40; // Adjusted for smaller nav bar
+          const navHeight = 40;
           const elementPosition = element.getBoundingClientRect().top + window.scrollY;
           window.scrollTo({
             top: elementPosition - navHeight,
@@ -596,11 +708,9 @@
             invalidReceipts: sessionInvalidReceipts
           }]);
           
-          // Update sessions state after deletion
           const updatedSessions = sessions.filter(s => s.id !== sessionId);
           setSessions(updatedSessions);
           
-          // Select the next available session (or none if no sessions remain)
           let nextSession = null;
           if (updatedSessions.length > 0) {
             nextSession = updatedSessions[updatedSessions.length - 1];
@@ -1095,6 +1205,7 @@
             currentSession={currentSession}
             handleLogout={handleLogout}
             scrollToSection={scrollToSection}
+            openSessionsModal={openSessionsModal}
           />
           <div className="max-w-5xl mx-auto">
             {error && (
@@ -1106,92 +1217,8 @@
               </div>
             )}
 
-            {/* Session Management */}
-            <div id="sessions" className="bg-white p-3 rounded-lg shadow-lg mb-3 mt-12">
-              <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Sessions</h2>
-              <div className="flex flex-col sm:flex-row gap-1 mb-2">
-                <input
-                  type="text"
-                  value={newSessionName}
-                  onChange={(e) => setNewSessionName(e.target.value)}
-                  placeholder="New Session Name (e.g., Book Payments)"
-                  className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                />
-                <button
-                  onClick={createNewSession}
-                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                >
-                  New Session
-                </button>
-                <select
-                  onChange={(e) => openSession(e.target.value)}
-                  className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                  value={currentSession ? currentSession.id : ""}
-                >
-                  {sessions.length === 0 && (
-                    <option value="">Select a Session</option>
-                  )}
-                  {sessions.map(session => (
-                    <option key={session.id} value={session.id}>{session.name}</option>
-                  ))}
-                </select>
-                {currentSession && (
-                  <button
-                    onClick={deleteSession}
-                    className="bg-red-500 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
-                  >
-                    Delete Session
-                  </button>
-                )}
-              </div>
-              {deletedSessions.length > 0 && (
-                <div id="trash-bin" className="bg-gray-50 p-3 rounded-lg shadow-sm">
-                  <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-base font-semibold text-gray-800">Trash Bin</h2>
-                    <button
-                      onClick={clearTrashBin}
-                      className="bg-red-600 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
-                    >
-                      Clear Trash Bin
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Session Name</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {deletedSessions.map(session => (
-                          <tr key={session.id} className="hover:bg-gray-50">
-                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{session.name}</td>
-                            <td className="border-b border-gray-200 p-1 flex gap-1">
-                              <button
-                                onClick={() => restoreSession(session.id)}
-                                className="bg-green-600 text-white px-1 py-1 rounded shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs"
-                              >
-                                Restore
-                              </button>
-                              <button
-                                onClick={() => permanentlyDeleteSession(session.id)}
-                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
-                              >
-                                Permanently Delete
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Session Workspace Canvas */}
-            <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 shadow-lg">
+            <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
               {currentSession && (
                 <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
                   {currentSession.name}
@@ -1446,13 +1473,35 @@
                   </div>
                 </div>
               )}
-
-              <ImageModal 
-                isOpen={isModalOpen}
-                onClose={closeModal}
-                imageSrc={selectedImage}
-              />
             </div>
+
+            <ImageModal 
+              isOpen={isModalOpen}
+              onClose={closeModal}
+              imageSrc={selectedImage}
+            />
+            <SessionsModal 
+              isOpen={isSessionsModalOpen}
+              onClose={closeSessionsModal}
+              sessions={sessions}
+              deletedSessions={deletedSessions}
+              currentSession={currentSession}
+              setSessions={setSessions}
+              setDeletedSessions={setDeletedSessions}
+              setCurrentSession={setCurrentSession}
+              setPayers={setPayers}
+              setInvalidReceipts={setInvalidReceipts}
+              setError={setError}
+              setIsLoading={setIsLoading}
+              newSessionName={newSessionName}
+              setNewSessionName={setNewSessionName}
+              openSession={openSession}
+              createNewSession={createNewSession}
+              deleteSession={deleteSession}
+              restoreSession={restoreSession}
+              permanentlyDeleteSession={permanentlyDeleteSession}
+              clearTrashBin={clearTrashBin}
+            />
           </div>
         </div>
       );
