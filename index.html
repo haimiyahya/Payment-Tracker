@@ -306,7 +306,7 @@
       return (
         <nav className="bg-blue-600 text-white fixed top-0 left-0 w-full z-40 shadow-md">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-14 sm:h-16">
+            <div className="flex justify-between items-center h-16 sm:h-16">
               <div className="flex-shrink-0">
                 <h1 className="text-xl sm:text-2xl font-bold">Payment Tracker</h1>
               </div>
@@ -435,7 +435,15 @@
       };
 
       const scrollToSection = (sectionId) => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+        const element = document.getElementById(sectionId);
+        if (element) {
+          const navHeight = 64; // Adjust this value to match your nav bar height
+          const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({
+            top: elementPosition - navHeight,
+            behavior: "smooth"
+          });
+        }
       };
 
       useEffect(() => {
@@ -1058,7 +1066,7 @@
       }
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-4 sm:p-6 pt-16 sm:pt-20">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-4 sm:p-6 pt-16">
           <NavBar
             isAuthenticated={isAuthenticated}
             currentSession={currentSession}
