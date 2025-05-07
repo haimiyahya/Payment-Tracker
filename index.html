@@ -664,7 +664,7 @@
         setIsLoading(true);
         setTimeout(async () => {
           setCurrentSession(session);
-          const payersData = await db.payers.where("sessionId").equals(session.id).toArray();
+          const payersData = await db.payers.where("sessionId").equals(session.id).ak();
           const invalidData = await db.invalidReceipts.where("sessionId").equals(session.id).toArray();
           setPayers(payersData.map(p => ({
             ...p,
@@ -1221,27 +1221,6 @@
                   {currentSession.name}
                 </h3>
               )}
-              {/* Content Navigation Buttons */}
-              <div className="flex flex-col sm:flex-row gap-1 mb-3">
-                <button
-                  onClick={() => scrollToSection("add-payer")}
-                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                >
-                  Add Payer
-                </button>
-                <button
-                  onClick={() => scrollToSection("upload-receipts")}
-                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                >
-                  Upload Receipts
-                </button>
-                <button
-                  onClick={() => scrollToSection("invalid-receipts")}
-                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                >
-                  Invalid Receipts
-                </button>
-              </div>
 
               {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
