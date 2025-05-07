@@ -517,6 +517,13 @@
           setError("Please enter a session name");
           return;
         }
+        // Check for duplicate session names
+        const sessionNameLower = newSessionName.trim().toLowerCase();
+        const existingSession = sessions.find(s => s.name.toLowerCase() === sessionNameLower);
+        if (existingSession) {
+          setError("A session with this name already exists. Please choose a different name.");
+          return;
+        }
         setIsLoading(true);
         setTimeout(async () => {
           const session = { name: newSessionName.trim() };
