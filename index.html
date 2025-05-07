@@ -53,7 +53,7 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="text-base sm:text-lg">
+<body class="text-sm">
   <div id="root"></div>
   <script type="text/javascript">
     var gk_isXlsx = false;
@@ -270,20 +270,20 @@
           onClick={onClose}
         >
           <div 
-            className="bg-white p-4 sm:p-6 rounded-2xl shadow-xl max-w-lg sm:max-w-2xl w-full relative"
+            className="bg-white p-3 rounded-lg shadow-xl max-w-md w-full relative"
             onClick={e => e.stopPropagation()}
           >
             <button
               onClick={onClose}
-              className="absolute top-1 sm:top-2 right-1 sm:right-2 text-gray-600 hover:text-gray-800 text-lg sm:text-2xl"
+              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-lg"
             >
               ×
             </button>
-            <h3 className="text-lg sm:text-xl font-semibold text-gray-800 mb-2 sm:mb-4">Receipt Preview</h3>
+            <h3 className="text-base font-semibold text-gray-800 mb-2">Receipt Preview</h3>
             <img 
               src={imageSrc} 
               alt="Receipt Preview" 
-              className="max-w-[200px] sm:max-w-full h-auto rounded shadow-sm"
+              className="max-w-[200px] h-auto rounded shadow-sm"
             />
           </div>
         </div>
@@ -304,18 +304,18 @@
 
       return (
         <nav className="bg-blue-600 text-white fixed top-0 left-0 w-full z-40 shadow-md">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16 sm:h-16">
+          <div className="max-w-6xl mx-auto px-3">
+            <div className="flex justify-between items-center h-12">
               <div className="flex-shrink-0">
-                <h1 className="text-xl sm:text-2xl font-bold">Payment Tracker</h1>
+                <h1 className="text-lg font-bold">Payment Tracker</h1>
               </div>
-              <div className="hidden sm:flex sm:space-x-4">
+              <div className="hidden sm:flex sm:space-x-2">
                 {isAuthenticated && navItems.map((item) => (
                   item.action ? (
                     <button
                       key={item.name}
                       onClick={item.action}
-                      className="px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                      className="px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
                     >
                       {item.name}
                     </button>
@@ -323,7 +323,7 @@
                     <button
                       key={item.name}
                       onClick={() => scrollToSection(item.section)}
-                      className="px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                      className="px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
                     >
                       {item.name}
                     </button>
@@ -333,10 +333,10 @@
               <div className="sm:hidden">
                 <button
                   onClick={() => setIsOpen(!isOpen)}
-                  className="text-white hover:bg-blue-700 p-2 rounded-md focus:outline-none"
+                  className="text-white hover:bg-blue-700 p-1 rounded focus:outline-none"
                 >
                   <svg
-                    className="h-6 w-6"
+                    className="h-5 w-5"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -360,7 +360,7 @@
                       <button
                         key={item.name}
                         onClick={() => { item.action(); setIsOpen(false); }}
-                        className="block px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 w-full text-left"
+                        className="block px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 w-full text-left"
                       >
                         {item.name}
                       </button>
@@ -368,7 +368,7 @@
                       <button
                         key={item.name}
                         onClick={() => { scrollToSection(item.section); setIsOpen(false); }}
-                        className="block px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 w-full text-left"
+                        className="block px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 w-full text-left"
                       >
                         {item.name}
                       </button>
@@ -436,7 +436,7 @@
       const scrollToSection = (sectionId) => {
         const element = document.getElementById(sectionId);
         if (element) {
-          const navHeight = 64; // Adjust this value to match your nav bar height
+          const navHeight = 48; // Adjusted for smaller nav bar
           const elementPosition = element.getBoundingClientRect().top + window.scrollY;
           window.scrollTo({
             top: elementPosition - navHeight,
@@ -603,21 +603,17 @@
           // Select the next available session (or none if no sessions remain)
           let nextSession = null;
           if (updatedSessions.length > 0) {
-            // Find the session that was previously loaded or the last one
-            nextSession = updatedSessions[updatedSessions.length - 1]; // Default to the last session
-            // If "beli buku agama" exists, prioritize it (based on your description)
+            nextSession = updatedSessions[updatedSessions.length - 1];
             const beliBukuAgama = updatedSessions.find(s => s.name.toLowerCase() === "beli buku agama");
             if (beliBukuAgama) {
               nextSession = beliBukuAgama;
             }
           }
           
-          // Set the current session to null temporarily to ensure UI updates
           setCurrentSession(null);
           setPayers([]);
           setInvalidReceipts([]);
           
-          // Load the next session if it exists
           if (nextSession) {
             await openSession(nextSession.id);
           }
@@ -1067,22 +1063,22 @@
 
       if (!isAuthenticated) {
         return (
-          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-4 sm:p-6">
-            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-lg w-full max-w-sm sm:max-w-md transform transition-all hover:scale-105">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-6 text-center">Payment Tracker</h1>
-              {error && <p className="text-red-500 mb-3 sm:mb-4 text-center text-sm sm:text-base">{error}</p>}
+          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-3">
+            <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-xs transform transition-all hover:scale-105">
+              <h1 className="text-xl font-bold text-gray-800 mb-3 text-center">Payment Tracker</h1>
+              {error && <p className="text-red-500 mb-2 text-center text-sm">{error}</p>}
               <form onSubmit={handleLogin}>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
-                  className="w-full p-2 sm:p-3 mb-3 sm:mb-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                  className="w-full p-2 mb-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                   required
                 />
                 <button
                   type="submit"
-                  className="w-full bg-blue-600 text-white p-2 sm:p-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+                  className="w-full bg-blue-600 text-white p-2 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm"
                 >
                   Login
                 </button>
@@ -1093,43 +1089,43 @@
       }
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-4 sm:p-6">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-3">
           <NavBar
             isAuthenticated={isAuthenticated}
             currentSession={currentSession}
             handleLogout={handleLogout}
             scrollToSection={scrollToSection}
           />
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-6xl mx-auto">
             {error && (
-              <p className="text-red-500 bg-red-50 p-2 sm:p-3 rounded-lg mb-4 sm:mb-6 text-sm sm:text-base animate-pulse">{error}</p>
+              <p className="text-red-500 bg-red-50 p-2 rounded mb-3 text-sm animate-pulse">{error}</p>
             )}
             {isLoading && (
               <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-                <div className="animate-spin rounded-full h-12 sm:h-16 w-12 sm:w-16 border-t-4 border-blue-500"></div>
+                <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-blue-500"></div>
               </div>
             )}
 
             {/* Session Management */}
-            <div id="sessions" className="bg-white p-4 sm:p-6 rounded-2xl shadow-lg mb-6 sm:mb-8 mt-16">
-              <h2 className="text-lg sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Payment Sessions</h2>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
+            <div id="sessions" className="bg-white p-4 rounded-lg shadow-lg mb-4 mt-14">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3">Payment Sessions</h2>
+              <div className="flex flex-col sm:flex-row gap-2 mb-3">
                 <input
                   type="text"
                   value={newSessionName}
                   onChange={(e) => setNewSessionName(e.target.value)}
                   placeholder="New Session Name (e.g., Book Payments)"
-                  className="p-2 sm:p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                  className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                 />
                 <button
                   onClick={createNewSession}
-                  className="bg-blue-600 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+                  className="bg-blue-600 text-white px-3 py-2 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm"
                 >
                   New Session
                 </button>
                 <select
                   onChange={(e) => openSession(e.target.value)}
-                  className="p-2 sm:p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                  className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                   value={currentSession ? currentSession.id : ""}
                 >
                   {sessions.length === 0 && (
@@ -1142,19 +1138,19 @@
                 {currentSession && (
                   <button
                     onClick={deleteSession}
-                    className="bg-red-500 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+                    className="bg-red-500 text-white px-3 py-2 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-sm"
                   >
                     Delete Session
                   </button>
                 )}
               </div>
               {deletedSessions.length > 0 && (
-                <div id="trash-bin" className="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-sm">
-                  <div className="flex justify-between items-center mb-4 sm:mb-6">
-                    <h2 className="text-lg sm:text-2xl font-semibold text-gray-800">Trash Bin</h2>
+                <div id="trash-bin" className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-lg font-semibold text-gray-800">Trash Bin</h2>
                     <button
                       onClick={clearTrashBin}
-                      className="bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded-lg shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+                      className="bg-red-600 text-white px-3 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-sm"
                     >
                       Clear Trash Bin
                     </button>
@@ -1163,24 +1159,24 @@
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Session Name</th>
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Actions</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Session Name</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {deletedSessions.map(session => (
                           <tr key={session.id} className="hover:bg-gray-50">
-                            <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{session.name}</td>
-                            <td className="border-b border-gray-200 p-2 sm:p-4 flex gap-1 sm:gap-2">
+                            <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{session.name}</td>
+                            <td className="border-b border-gray-200 p-2 flex gap-1">
                               <button
                                 onClick={() => restoreSession(session.id)}
-                                className="bg-green-600 text-white px-2 sm:px-3 py-1 rounded-lg shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs sm:text-sm"
+                                className="bg-green-600 text-white px-2 py-1 rounded shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Restore
                               </button>
                               <button
                                 onClick={() => permanentlyDeleteSession(session.id)}
-                                className="bg-red-500 text-white px-2 sm:px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs sm:text-sm"
+                                className="bg-red-500 text-white px-2 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Permanently Delete
                               </button>
@@ -1195,23 +1191,23 @@
             </div>
 
             {/* Session Workspace Canvas */}
-            <div id="dashboard" className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 shadow-lg">
+            <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-4 mb-4 shadow-lg">
               {currentSession && (
-                <h3 className="text-xl sm:text-3xl font-bold text-gray-800 text-center bg-blue-50 p-3 sm:p-4 rounded-lg mb-6 sm:mb-8">
+                <h3 className="text-xl font-bold text-gray-800 text-center bg-blue-50 p-2 rounded mb-4">
                   {currentSession.name}
                 </h3>
               )}
 
               {/* Add Payer Form */}
-              <div id="add-payer" className="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-sm mb-6 sm:mb-8">
-                <h2 className="text-lg sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Add Payer</h2>
-                <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div id="add-payer" className="bg-gray-50 p-4 rounded-lg shadow-sm mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3">Add Payer</h2>
+                <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-2 mb-3">
                   <input
                     type="text"
                     value={newPayer.name}
                     onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })}
                     placeholder="Payer Name"
-                    className="p-2 sm:p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                    className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                     required
                   />
                   <input
@@ -1221,25 +1217,25 @@
                     placeholder="Expected Amount (RM)"
                     step="0.01"
                     min="0"
-                    className="p-2 sm:p-3 border border-gray-200 rounded-lg flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                    className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                     required
                   />
                   <button
                     type="submit"
-                    className="bg-blue-600 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+                    className="bg-blue-600 text-white px-3 py-2 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm"
                   >
                     Add
                   </button>
                 </form>
                 <div
-                  className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all duration-300 ${
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-300 ${
                     isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
                   }`}
                   onDragOver={handleCSVDragOver}
                   onDragLeave={handleCSVDragLeave}
                   onDrop={handleCSVDrop}
                 >
-                  <p className="mb-3 sm:mb-4 text-gray-600 text-sm sm:text-base">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
+                  <p className="mb-2 text-gray-600 text-sm">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
                   <input
                     type="file"
                     accept=".csv"
@@ -1249,7 +1245,7 @@
                   />
                   <label
                     htmlFor="csvInput"
-                    className="bg-blue-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-sm sm:text-base"
+                    className="bg-blue-600 text-white px-3 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-sm"
                   >
                     Select CSV File
                   </label>
@@ -1257,18 +1253,18 @@
               </div>
 
               {/* PDF Upload with Drag-and-Drop */}
-              <div id="upload-receipts" className="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-sm mb-6 sm:mb-8">
-                <h2 className="text-lg sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Upload Receipts</h2>
-                {pdfError && <p className="text-red-500 bg-red-50 p-2 sm:p-3 rounded-lg mb-3 sm:mb-4 text-sm sm:text-base">{pdfError}</p>}
+              <div id="upload-receipts" className="bg-gray-50 p-4 rounded-lg shadow-sm mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3">Upload Receipts</h2>
+                {pdfError && <p className="text-red-500 bg-red-50 p-2 rounded mb-2 text-sm">{pdfError}</p>}
                 <div
-                  className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all duration-300 ${
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-300 ${
                     isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
                   }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  <p className="mb-3 sm:mb-4 text-gray-600 text-sm sm:text-base">Drag and drop PDF files here or click to select</p>
+                  <p className="mb-2 text-gray-600 text-sm">Drag and drop PDF files here or click to select</p>
                   <input
                     type="file"
                     accept=".pdf"
@@ -1279,7 +1275,7 @@
                   />
                   <label
                     htmlFor="fileInput"
-                    className="bg-blue-600 text-white px-3 sm:px-4 py-1 sm:py-2 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-sm sm:text-base"
+                    className="bg-blue-600 text-white px-3 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-sm"
                   >
                     Select Files
                   </label>
@@ -1287,13 +1283,13 @@
               </div>
 
               {/* Dashboard */}
-              <div className="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-sm mb-6 sm:mb-8">
-                <h2 className="text-lg sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Payment Status</h2>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3">Payment Status</h2>
+                <div className="flex flex-col sm:flex-row gap-2 mb-3">
                   <select
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
-                    className="p-2 sm:p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                    className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                   >
                     <option value="All">All</option>
                     <option value="Paid">Paid</option>
@@ -1304,7 +1300,7 @@
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="p-2 sm:p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm sm:text-base"
+                    className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                   >
                     <option value="name-asc">Name (A-Z)</option>
                     <option value="name-desc">Name (Z-A)</option>
@@ -1313,7 +1309,7 @@
                   </select>
                   <button
                     onClick={exportToCSV}
-                    className="bg-green-600 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+                    className="bg-green-600 text-white px-3 py-2 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-sm"
                   >
                     Export to CSV
                   </button>
@@ -1322,13 +1318,13 @@
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Name</th>
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Expected Amount</th>
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Paid Amount</th>
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Transaction Date</th>
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Status</th>
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">PDF File</th>
-                        <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Actions</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Name</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Paid Amount</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Transaction Date</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Status</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">PDF File</th>
+                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1343,13 +1339,13 @@
                               : "bg-white hover:bg-gray-50"
                           }
                         >
-                          <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{payer.name}</td>
-                          <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">RM{payer.expectedAmount}</td>
-                          <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
-                          <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{payer.transactionDate || "-"}</td>
-                          <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{payer.status}</td>
-                          <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{payer.pdfFilename || "-"}</td>
-                          <td className="border-b border-gray-200 p-2 sm:p-4 flex flex-wrap gap-1 sm:gap-2">
+                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.name}</td>
+                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
+                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
+                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
+                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.status}</td>
+                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
+                          <td className="border-b border-gray-200 p-2 flex flex-wrap gap-1">
                             <button
                               onClick={() => {
                                 const newName = prompt("Enter new name", payer.name);
@@ -1361,20 +1357,20 @@
                                   });
                                 }
                               }}
-                              className="bg-yellow-500 text-white px-2 sm:px-3 py-1 rounded-lg shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs sm:text-sm"
+                              className="bg-yellow-500 text-white px-2 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs"
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => deletePayer(payer.id)}
-                              className="bg-red-500 text-white px-2 sm:px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs sm:text-sm"
+                              className="bg-red-500 text-white px-2 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
                             >
                               Delete
                             </button>
                             {payer.paidAmount && (
                               <button
                                 onClick={() => deletePayment(payer.id)}
-                                className="bg-gray-500 text-white px-2 sm:px-3 py-1 rounded-lg shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs sm:text-sm"
+                                className="bg-gray-500 text-white px-2 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Clear Payment
                               </button>
@@ -1389,39 +1385,39 @@
 
               {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
-                <div id="invalid-receipts" className="bg-gray-50 p-4 sm:p-6 rounded-xl shadow-sm">
-                  <h2 className="text-lg sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Invalid Receipts</h2>
+                <div id="invalid-receipts" className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                  <h2 className="text-lg font-semibold text-gray-800 mb-3">Invalid Receipts</h2>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Filename</th>
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Preview</th>
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Reason</th>
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Assign</th>
-                          <th className="border-b border-gray-200 p-2 sm:p-4 text-left text-gray-700 font-semibold text-xs sm:text-sm">Actions</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Filename</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Preview</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Reason</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Assign</th>
+                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invalidReceipts.map(receipt => (
                           <tr key={receipt.id} className="hover:bg-gray-50">
-                            <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{receipt.filename}</td>
-                            <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700">
+                            <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{receipt.filename}</td>
+                            <td className="border-b border-gray-200 p-2 text-gray-700">
                               {receipt.pngData ? (
                                 <img 
                                   src={receipt.pngData} 
                                   alt="PDF Preview" 
-                                  className="max-w-[150px] sm:max-w-[200px] h-auto rounded shadow-sm cursor-pointer"
+                                  className="max-w-[100px] h-auto rounded shadow-sm cursor-pointer"
                                   onClick={() => openModal(receipt.pngData)}
                                 />
                               ) : (
-                                <span className="text-gray-500 text-xs sm:text-sm">No preview available</span>
+                                <span className="text-gray-500 text-xs">No preview available</span>
                               )}
                             </td>
-                            <td className="border-b border-gray-200 p-2 sm:p-4 text-gray-700 text-xs sm:text-sm">{receipt.reason}</td>
-                            <td className="border-b border-gray-200 p-2 sm:p-4 flex gap-1 sm:gap-2">
+                            <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{receipt.reason}</td>
+                            <td className="border-b border-gray-200 p-2 flex gap-1">
                               <select
-                                className="p-1 sm:p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs sm:text-sm"
+                                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                                 onChange={(e) => {
                                   const amount = prompt("Enter amount");
                                   if (amount) {
@@ -1435,10 +1431,10 @@
                                 ))}
                               </select>
                             </td>
-                            <td className="border-b border-gray-200 p-2 sm:p-4">
+                            <td className="border-b border-gray-200 p-2">
                               <button
                                 onClick={() => deleteInvalidReceipt(receipt.id)}
-                                className="bg-red-500 text-white px-2 sm:px-3 py-1 rounded-lg shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs sm:text-sm"
+                                className="bg-red-500 text-white px-2 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Delete
                               </button>
