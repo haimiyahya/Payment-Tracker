@@ -293,10 +293,12 @@
     function SessionsModal({ isOpen, onClose, sessions, deletedSessions, currentSession, setSessions, setDeletedSessions, setCurrentSession, setPayers, setInvalidReceipts, setError, setIsLoading, newSessionName, setNewSessionName, openSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, clearTrashBin }) {
       if (!isOpen) return null;
 
+      const mustCreateSession = sessions.length === 0 && !currentSession;
+
       return (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={onClose}
+          onClick={mustCreateSession ? null : onClose}
         >
           <div 
             className="bg-white p-3 rounded-lg shadow-xl max-w-lg w-full relative"
@@ -304,11 +306,15 @@
           >
             <button
               onClick={onClose}
-              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
+              className={`absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm ${mustCreateSession ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={mustCreateSession}
             >
               ×
             </button>
             <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Sessions</h2>
+            {mustCreateSession && (
+              <p className="text-red-500 mb-2 text-xs">Please create a session to continue.</p>
+            )}
             <div className="flex flex-col sm:flex-row gap-1 mb-2">
               <input
                 type="text"
@@ -519,6 +525,7 @@
       };
 
       const closeSessionsModal = () => {
+        if (sessions.length === 0 && !currentSession) return; // Prevent closing if no session
         setIsSessionsModalOpen(false);
       };
 
@@ -539,6 +546,8 @@
             transactionDate: p.transactionDate || null
           })));
           setInvalidReceipts(invalidData);
+        } else {
+          setIsSessionsModalOpen(true); // Open modal if no sessions exist
         }
       };
 
@@ -580,6 +589,7 @@
           setSessions([]);
           setDeletedSessions([]);
           setCurrentSession(null);
+          setIsSessionsModalOpen(true); // Reopen modal on timeout
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
       };
@@ -618,6 +628,7 @@
         setSessions([]);
         setDeletedSessions([]);
         setCurrentSession(null);
+        setIsSessionsModalOpen(true); // Reopen modal on logout
       };
 
       const createNewSession = async () => {
@@ -642,6 +653,7 @@
           setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
+          setIsSessionsModalOpen(false); // Close modal after successful creation
           setIsLoading(false);
         }, 500);
       };
@@ -664,7 +676,7 @@
         setIsLoading(true);
         setTimeout(async () => {
           setCurrentSession(session);
-          const payersData = await db.payers.where("sessionId").equals(session.id).ak();
+          const payersData = await db.payers.where("sessionId").equals(session.id).toArray();
           const invalidData = await db.invalidReceipts.where("sessionId").equals(session.id).toArray();
           setPayers(payersData.map(p => ({
             ...p,
@@ -723,6 +735,8 @@
           
           if (nextSession) {
             await openSession(nextSession.id);
+          } else {
+            setIsSessionsModalOpen(true); // Reopen modal if no sessions remain
           }
           
           setError("Session moved to Trash Bin");
@@ -1366,7 +1380,7 @@
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.name}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
-                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
+                          <td className=" مرز-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.status}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
                           <td className="border-b border-gray-200 p-1 flex flex-wrap gap-1">
