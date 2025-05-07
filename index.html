@@ -299,7 +299,9 @@
           onClick={onClose}
         >
           <div 
-            className="bg-white p-3 rounded-lg shadow-xl max-w-lg w-full relative"
+            className="bg-white p-3 rounded
+
+-lg shadow-xl max-w-lg w-full relative"
             onClick={e => e.stopPropagation()}
           >
             <button
@@ -399,9 +401,6 @@
       const navItems = [
         { name: "Home", section: "dashboard" },
         { name: "Sessions", action: openSessionsModal },
-        { name: "Add Payer", section: "add-payer" },
-        { name: "Upload Receipts", section: "upload-receipts" },
-        { name: "Invalid Receipts", section: "invalid-receipts" },
         { name: "Logout", action: handleLogout },
       ];
 
@@ -1218,8 +1217,35 @@
             )}
 
             {/* Session Workspace Canvas */}
-            <div className="bg-white border border-gray-100 rounded-lg p-3 shadow-lg">
-              {/* Moved sections above the session title */}
+            <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
+              {currentSession && (
+                <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
+                  {currentSession.name}
+                </h3>
+              )}
+              {/* Content Navigation Buttons */}
+              <div className="flex flex-col sm:flex-row gap-1 mb-3">
+                <button
+                  onClick={() => scrollToSection("add-payer")}
+                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+                >
+                  Add Payer
+                </button>
+                <button
+                  onClick={() => scrollToSection("upload-receipts")}
+                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+                >
+                  Upload Receipts
+                </button>
+                <button
+                  onClick={() => scrollToSection("invalid-receipts")}
+                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+                >
+                  Invalid Receipts
+                </button>
+              </div>
+
+              {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
                 <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1273,6 +1299,7 @@
                 </div>
               </div>
 
+              {/* PDF Upload with Drag-and-Drop */}
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
@@ -1302,76 +1329,7 @@
                 </div>
               </div>
 
-              {invalidReceipts.length > 0 && (
-                <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
-                  <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {invalidReceipts.map(receipt => (
-                          <tr key={receipt.id} className="hover:bg-gray-50">
-                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.filename}</td>
-                            <td className="border-b border-gray-200 p-1 text-gray-700">
-                              {receipt.pngData ? (
-                                <img 
-                                  src={receipt.pngData} 
-                                  alt="PDF Preview" 
-                                  className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer"
-                                  onClick={() => openModal(receipt.pngData)}
-                                />
-                              ) : (
-                                <span className="text-gray-500 text-xs">No preview available</span>
-                              )}
-                            </td>
-                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.reason}</td>
-                            <td className="border-b border-gray-200 p-1 flex gap-1">
-                              <select
-                                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                                onChange={(e) => {
-                                  const amount = prompt("Enter amount");
-                                  if (amount) {
-                                    assignReceipt(receipt.id, e.target.value, amount);
-                                  }
-                                }}
-                              >
-                                <option value="">Select Payer</option>
-                                {payers.map(p => (
-                                  <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="border-b border-gray-200 p-1">
-                              <button
-                                onClick={() => deleteInvalidReceipt(receipt.id)}
-                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Session Title and Dashboard */}
-              {currentSession && (
-                <h3 id="dashboard" className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
-                  {currentSession.name}
-                </h3>
-              )}
-
+              {/* Dashboard */}
               <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
                 <div className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1408,7 +1366,8 @@
                     <thead>
                       <tr className="bg-gray-100">
                         <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Name</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
+                        <th className="border-b border-gray-200 p-1borders-collapse">
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
                         <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Paid Amount</th>
                         <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Transaction Date</th>
                         <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Status</th>
@@ -1471,6 +1430,70 @@
                   </table>
                 </div>
               </div>
+
+              {/* Invalid Receipts */}
+              {invalidReceipts.length > 0 && (
+                <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invalidReceipts.map(receipt => (
+                          <tr key={receipt.id} className="hover:bg-gray-50">
+                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.filename}</td>
+                            <td className="border-b border-gray-200 p-1 text-gray-700">
+                              {receipt.pngData ? (
+                                <img 
+                                  src={receipt.pngData} 
+                                  alt="PDF Preview" 
+                                  className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer"
+                                  onClick={() => openModal(receipt.pngData)}
+                                />
+                              ) : (
+                                <span className="text-gray-500 text-xs">No preview available</span>
+                              )}
+                            </td>
+                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.reason}</td>
+                            <td className="border-b border-gray-200 p-1 flex gap-1">
+                              <select
+                                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                                onChange={(e) => {
+                                  const amount = prompt("Enter amount");
+                                  if (amount) {
+                                    assignReceipt(receipt.id, e.target.value, amount);
+                                  }
+                                }}
+                              >
+                                <option value="">Select Payer</option>
+                                {payers.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="border-b border-gray-200 p-1">
+                              <button
+                                onClick={() => deleteInvalidReceipt(receipt.id)}
+                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
             <ImageModal 
@@ -1498,7 +1521,7 @@
               deleteSession={deleteSession}
               restoreSession={restoreSession}
               permanentlyDeleteSession={permanentlyDeleteSession}
-              clearTrashBin={clearTrashBin}
+              clearTrashBin={clearTrustBin}
             />
           </div>
         </div>
