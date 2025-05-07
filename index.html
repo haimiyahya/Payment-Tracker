@@ -142,7 +142,7 @@
     }).upgrade(async (tx) => {
       console.log("Upgrading database from version 5 to 6");
       try {
-        const invalidReceipts = await tx.table("invalidReceipts").toArray();
+        const invalidReceiving = await tx.table("invalidReceipts").toArray();
         if (invalidReceipts.length > 0) {
           console.log(`Updating ${invalidReceipts.length} invalid receipts to include pngData`);
           await tx.table("invalidReceipts").bulkPut(
@@ -292,22 +292,7 @@
       );
     }
 
-    function PrintPreviewModal({ isOpen, onClose, onPrint, setOrientation, setZoom, generatePDF, setPdfDataUrl }) {
-      const { useEffect } = React;
-
-      useEffect(() => {
-        if (isOpen) {
-          const doc = generatePDF();
-          const pdfBlob = doc.output('blob');
-          const pdfUrl = URL.createObjectURL(pdfBlob);
-          setPdfDataUrl(pdfUrl);
-
-          return () => {
-            URL.revokeObjectURL(pdfUrl);
-          };
-        }
-      }, [isOpen, generatePDF, setPdfDataUrl]);
-
+    function PrintPreviewModal({ isOpen, onClose, onPrint, pdfDataUrl, setOrientation, setZoom }) {
       if (!isOpen) return null;
 
       return (
@@ -353,7 +338,7 @@
               </button>
             </div>
             <iframe
-              src={window.pdfDataUrl || ''}
+              src={pdfDataUrl}
               className="w-full h-[500px] border border-gray-200 rounded"
               title="PDF Preview"
             ></iframe>
@@ -1291,6 +1276,10 @@
       };
 
       const exportToPDF = () => {
+        const doc = generatePDF();
+        const pdfBlob = doc.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        setPdfDataUrl(pdfUrl);
         setIsPrintPreviewOpen(true);
       };
 
@@ -1300,7 +1289,7 @@
         const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
         doc.save(`payment_status_${sessionName}_${date}.pdf`);
         setIsPrintPreviewOpen(false);
-        setPdfDataUrl("");
+        URL.revokeObjectURL(pdfDataUrl);
       };
 
       const filteredPayers = payers.filter(p => 
@@ -1648,11 +1637,10 @@
               isOpen={isPrintPreviewOpen}
               onClose={() => {
                 setIsPrintPreviewOpen(false);
-                setPdfDataUrl("");
+                URL.revokeObjectURL(pdfDataUrl);
               }}
               onPrint={handlePrint}
-              generatePDF={generatePDF}
-              setPdfDataUrl={setPdfDataUrl}
+              pdfDataUrl={pdfDataUrl}
               setOrientation={setOrientation}
               setZoom={setZoom}
             />
