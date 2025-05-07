@@ -90,7 +90,7 @@
     }
   </script>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     const db = new Dexie("PaymentTrackerDB");
     db.version(4).stores({
@@ -142,7 +142,7 @@
     }).upgrade(async (tx) => {
       console.log("Upgrading database from version 5 to 6");
       try {
-        const invalidReceipts = await tx.table("invalidReceipts").toArray();
+        const invalidReceiving = await tx.table("invalidReceipts").toArray();
         if (invalidReceipts.length > 0) {
           console.log(`Updating ${invalidReceipts.length} invalid receipts to include pngData`);
           await tx.table("invalidReceipts").bulkPut(
@@ -287,6 +287,61 @@
               alt="Receipt Preview" 
               className="max-w-[300px] h-auto rounded shadow-sm"
             />
+          </div>
+        </div>
+      );
+    }
+
+    function PrintPreviewModal({ isOpen, onClose, onPrint, pdfDataUrl, setOrientation, setZoom }) {
+      if (!isOpen) return null;
+
+      return (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={onClose}
+        >
+          <div 
+            className="bg-white p-3 rounded-lg shadow-xl max-w-4xl w-full relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
+            >
+              ×
+            </button>
+            <h3 className="text-base font-semibold text-gray-800 mb-2">Print Preview</h3>
+            <div className="flex flex-col sm:flex-row gap-2 mb-2">
+              <select
+                onChange={(e) => setOrientation(e.target.value)}
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+              >
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+              <select
+                onChange={(e) => setZoom(parseFloat(e.target.value))}
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+              >
+                <option value="1.0">100%</option>
+                <option value="0.9">90%</option>
+                <option value="0.8">80%</option>
+                <option value="0.7">70%</option>
+                <option value="0.6">60%</option>
+                <option value="0.5">50%</option>
+              </select>
+              <button
+                onClick={onPrint}
+                className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+              >
+                Print/Download
+              </button>
+            </div>
+            <iframe
+              src={pdfDataUrl}
+              className="w-full h-[500px] border border-gray-200 rounded"
+              title="PDF Preview"
+            ></iframe>
           </div>
         </div>
       );
@@ -511,6 +566,10 @@
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [selectedImage, setSelectedImage] = useState(null);
       const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
+      const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+      const [pdfDataUrl, setPdfDataUrl] = useState("");
+      const [orientation, setOrientation] = useState("portrait");
+      const [zoom, setZoom] = useState(1.0);
 
       const openModal = (imageSrc) => {
         setSelectedImage(imageSrc);
@@ -1170,17 +1229,21 @@
         URL.revokeObjectURL(url);
       };
 
-      const exportToPDF = () => {
+      const generatePDF = () => {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
+        const doc = new jsPDF({
+          orientation: orientation,
+          unit: 'mm',
+          format: 'a4'
+        });
+
         // Header
-        doc.setFontSize(16);
+        doc.setFontSize(16 * zoom);
         doc.text("Payment Tracker - Payment Status", 14, 20);
-        doc.setFontSize(12);
+        doc.setFontSize(12 * zoom);
         doc.text(`Session: ${currentSession ? currentSession.name : "Unnamed"}`, 14, 30);
         doc.text(`Exported on: ${new Date().toLocaleString()}`, 14, 40);
-        
+
         // Table
         const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
         const rows = filteredPayers.map(p => [
@@ -1191,28 +1254,42 @@
           p.status,
           p.pdfFilename || "-"
         ]);
-        
+
         doc.autoTable({
           startY: 50,
           head: [headers],
           body: rows,
           theme: "grid",
-          styles: { fontSize: 8, cellPadding: 2 },
+          styles: { fontSize: 8 * zoom, cellPadding: 2 * zoom },
           columnStyles: {
-            0: { cellWidth: 40 }, // Name
-            1: { cellWidth: 30 }, // Expected Amount
-            2: { cellWidth: 30 }, // Paid Amount
-            3: { cellWidth: 40 }, // Transaction Date
-            4: { cellWidth: 30 }, // Status
-            5: { cellWidth: 40 }  // PDF File
+            0: { cellWidth: 40 * zoom }, // Name
+            1: { cellWidth: 30 * zoom }, // Expected Amount
+            2: { cellWidth: 30 * zoom }, // Paid Amount
+            3: { cellWidth: 40 * zoom }, // Transaction Date
+            4: { cellWidth: 30 * zoom }, // Status
+            5: { cellWidth: 40 * zoom }  // PDF File
           },
           margin: { top: 50, left: 14, right: 14 }
         });
-        
-        // Save
+
+        return doc;
+      };
+
+      const exportToPDF = () => {
+        const doc = generatePDF();
+        const pdfBlob = doc.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        setPdfDataUrl(pdfUrl);
+        setIsPrintPreviewOpen(true);
+      };
+
+      const handlePrint = () => {
+        const doc = generatePDF();
         const sessionName = currentSession ? currentSession.name.replace(/\s+/g, "_") : "unnamed";
         const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
         doc.save(`payment_status_${sessionName}_${date}.pdf`);
+        setIsPrintPreviewOpen(false);
+        URL.revokeObjectURL(pdfDataUrl);
       };
 
       const filteredPayers = payers.filter(p => 
@@ -1555,6 +1632,17 @@
               restoreSession={restoreSession}
               permanentlyDeleteSession={permanentlyDeleteSession}
               clearTrashBin={clearTrashBin}
+            />
+            <PrintPreviewModal
+              isOpen={isPrintPreviewOpen}
+              onClose={() => {
+                setIsPrintPreviewOpen(false);
+                URL.revokeObjectURL(pdfDataUrl);
+              }}
+              onPrint={handlePrint}
+              pdfDataUrl={pdfDataUrl}
+              setOrientation={setOrientation}
+              setZoom={setZoom}
             />
           </div>
         </div>
