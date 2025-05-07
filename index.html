@@ -53,7 +53,7 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="text-sm">
+<body class="text-xs">
   <div id="root"></div>
   <script type="text/javascript">
     var gk_isXlsx = false;
@@ -270,20 +270,20 @@
           onClick={onClose}
         >
           <div 
-            className="bg-white p-3 rounded-lg shadow-xl max-w-md w-full relative"
+            className="bg-white p-2 rounded-lg shadow-xl max-w-xs w-full relative"
             onClick={e => e.stopPropagation()}
           >
             <button
               onClick={onClose}
-              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-lg"
+              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
             >
               ×
             </button>
-            <h3 className="text-base font-semibold text-gray-800 mb-2">Receipt Preview</h3>
+            <h3 className="text-xs font-semibold text-gray-800 mb-1">Receipt Preview</h3>
             <img 
               src={imageSrc} 
               alt="Receipt Preview" 
-              className="max-w-[200px] h-auto rounded shadow-sm"
+              className="max-w-[150px] h-auto rounded shadow-sm"
             />
           </div>
         </div>
@@ -304,18 +304,18 @@
 
       return (
         <nav className="bg-blue-600 text-white fixed top-0 left-0 w-full z-40 shadow-md">
-          <div className="max-w-6xl mx-auto px-3">
-            <div className="flex justify-between items-center h-12">
+          <div className="max-w-5xl mx-auto px-2">
+            <div className="flex justify-between items-center h-10">
               <div className="flex-shrink-0">
-                <h1 className="text-lg font-bold">Payment Tracker</h1>
+                <h1 className="text-base font-bold">Payment Tracker</h1>
               </div>
-              <div className="hidden sm:flex sm:space-x-2">
+              <div className="hidden sm:flex sm:space-x-1">
                 {isAuthenticated && navItems.map((item) => (
                   item.action ? (
                     <button
                       key={item.name}
                       onClick={item.action}
-                      className="px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+                      className="px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
                     >
                       {item.name}
                     </button>
@@ -323,7 +323,7 @@
                     <button
                       key={item.name}
                       onClick={() => scrollToSection(item.section)}
-                      className="px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+                      className="px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
                     >
                       {item.name}
                     </button>
@@ -336,7 +336,7 @@
                   className="text-white hover:bg-blue-700 p-1 rounded focus:outline-none"
                 >
                   <svg
-                    className="h-5 w-5"
+                    className="h-4 w-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -354,13 +354,13 @@
             </div>
             {isOpen && (
               <div className="sm:hidden">
-                <div className="px-2 pt-2 pb-3 space-y-1">
+                <div className="px-2 pt-1 pb-2 space-y-1">
                   {isAuthenticated && navItems.map((item) => (
                     item.action ? (
                       <button
                         key={item.name}
                         onClick={() => { item.action(); setIsOpen(false); }}
-                        className="block px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 w-full text-left"
+                        className="block px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 w-full text-left"
                       >
                         {item.name}
                       </button>
@@ -368,7 +368,7 @@
                       <button
                         key={item.name}
                         onClick={() => { scrollToSection(item.section); setIsOpen(false); }}
-                        className="block px-2 py-1 rounded text-sm font-medium hover:bg-blue-700 w-full text-left"
+                        className="block px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 w-full text-left"
                       >
                         {item.name}
                       </button>
@@ -436,7 +436,7 @@
       const scrollToSection = (sectionId) => {
         const element = document.getElementById(sectionId);
         if (element) {
-          const navHeight = 48; // Adjusted for smaller nav bar
+          const navHeight = 40; // Adjusted for smaller nav bar
           const elementPosition = element.getBoundingClientRect().top + window.scrollY;
           window.scrollTo({
             top: elementPosition - navHeight,
@@ -1063,22 +1063,22 @@
 
       if (!isAuthenticated) {
         return (
-          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-3">
-            <div className="bg-white p-4 rounded-lg shadow-lg w-full max-w-xs transform transition-all hover:scale-105">
-              <h1 className="text-xl font-bold text-gray-800 mb-3 text-center">Payment Tracker</h1>
-              {error && <p className="text-red-500 mb-2 text-center text-sm">{error}</p>}
+          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-2">
+            <div className="bg-white p-3 rounded-lg shadow-lg w-full max-w-xs transform transition-all hover:scale-105">
+              <h1 className="text-base font-bold text-gray-800 mb-2 text-center">Payment Tracker</h1>
+              {error && <p className="text-red-500 mb-1 text-center text-xs">{error}</p>}
               <form onSubmit={handleLogin}>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
-                  className="w-full p-2 mb-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                  className="w-full p-1 mb-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   required
                 />
                 <button
                   type="submit"
-                  className="w-full bg-blue-600 text-white p-2 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm"
+                  className="w-full bg-blue-600 text-white p-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
                 >
                   Login
                 </button>
@@ -1089,43 +1089,43 @@
       }
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-3">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-2">
           <NavBar
             isAuthenticated={isAuthenticated}
             currentSession={currentSession}
             handleLogout={handleLogout}
             scrollToSection={scrollToSection}
           />
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             {error && (
-              <p className="text-red-500 bg-red-50 p-2 rounded mb-3 text-sm animate-pulse">{error}</p>
+              <p className="text-red-500 bg-red-50 p-1 rounded mb-2 text-xs animate-pulse">{error}</p>
             )}
             {isLoading && (
               <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-blue-500"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div>
               </div>
             )}
 
             {/* Session Management */}
-            <div id="sessions" className="bg-white p-4 rounded-lg shadow-lg mb-4 mt-14">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Payment Sessions</h2>
-              <div className="flex flex-col sm:flex-row gap-2 mb-3">
+            <div id="sessions" className="bg-white p-3 rounded-lg shadow-lg mb-3 mt-12">
+              <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Sessions</h2>
+              <div className="flex flex-col sm:flex-row gap-1 mb-2">
                 <input
                   type="text"
                   value={newSessionName}
                   onChange={(e) => setNewSessionName(e.target.value)}
                   placeholder="New Session Name (e.g., Book Payments)"
-                  className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                  className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                 />
                 <button
                   onClick={createNewSession}
-                  className="bg-blue-600 text-white px-3 py-2 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm"
+                  className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
                 >
                   New Session
                 </button>
                 <select
                   onChange={(e) => openSession(e.target.value)}
-                  className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                  className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   value={currentSession ? currentSession.id : ""}
                 >
                   {sessions.length === 0 && (
@@ -1138,19 +1138,19 @@
                 {currentSession && (
                   <button
                     onClick={deleteSession}
-                    className="bg-red-500 text-white px-3 py-2 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-sm"
+                    className="bg-red-500 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
                   >
                     Delete Session
                   </button>
                 )}
               </div>
               {deletedSessions.length > 0 && (
-                <div id="trash-bin" className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                  <div className="flex justify-between items-center mb-3">
-                    <h2 className="text-lg font-semibold text-gray-800">Trash Bin</h2>
+                <div id="trash-bin" className="bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-base font-semibold text-gray-800">Trash Bin</h2>
                     <button
                       onClick={clearTrashBin}
-                      className="bg-red-600 text-white px-3 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-sm"
+                      className="bg-red-600 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
                     >
                       Clear Trash Bin
                     </button>
@@ -1159,24 +1159,24 @@
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Session Name</th>
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Session Name</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {deletedSessions.map(session => (
                           <tr key={session.id} className="hover:bg-gray-50">
-                            <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{session.name}</td>
-                            <td className="border-b border-gray-200 p-2 flex gap-1">
+                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{session.name}</td>
+                            <td className="border-b border-gray-200 p-1 flex gap-1">
                               <button
                                 onClick={() => restoreSession(session.id)}
-                                className="bg-green-600 text-white px-2 py-1 rounded shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs"
+                                className="bg-green-600 text-white px-1 py-1 rounded shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Restore
                               </button>
                               <button
                                 onClick={() => permanentlyDeleteSession(session.id)}
-                                className="bg-red-500 text-white px-2 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Permanently Delete
                               </button>
@@ -1191,23 +1191,23 @@
             </div>
 
             {/* Session Workspace Canvas */}
-            <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-4 mb-4 shadow-lg">
+            <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 shadow-lg">
               {currentSession && (
-                <h3 className="text-xl font-bold text-gray-800 text-center bg-blue-50 p-2 rounded mb-4">
+                <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
                   {currentSession.name}
                 </h3>
               )}
 
               {/* Add Payer Form */}
-              <div id="add-payer" className="bg-gray-50 p-4 rounded-lg shadow-sm mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 mb-3">Add Payer</h2>
-                <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-2 mb-3">
+              <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
+                <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
+                <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
                   <input
                     type="text"
                     value={newPayer.name}
                     onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })}
                     placeholder="Payer Name"
-                    className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                     required
                   />
                   <input
@@ -1217,25 +1217,25 @@
                     placeholder="Expected Amount (RM)"
                     step="0.01"
                     min="0"
-                    className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                     required
                   />
                   <button
                     type="submit"
-                    className="bg-blue-600 text-white px-3 py-2 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-sm"
+                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
                   >
                     Add
                   </button>
                 </form>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-300 ${
+                  className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
                     isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
                   }`}
                   onDragOver={handleCSVDragOver}
                   onDragLeave={handleCSVDragLeave}
                   onDrop={handleCSVDrop}
                 >
-                  <p className="mb-2 text-gray-600 text-sm">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
+                  <p className="mb-1 text-gray-600 text-xs">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
                   <input
                     type="file"
                     accept=".csv"
@@ -1245,7 +1245,7 @@
                   />
                   <label
                     htmlFor="csvInput"
-                    className="bg-blue-600 text-white px-3 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-sm"
+                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs"
                   >
                     Select CSV File
                   </label>
@@ -1253,18 +1253,18 @@
               </div>
 
               {/* PDF Upload with Drag-and-Drop */}
-              <div id="upload-receipts" className="bg-gray-50 p-4 rounded-lg shadow-sm mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 mb-3">Upload Receipts</h2>
-                {pdfError && <p className="text-red-500 bg-red-50 p-2 rounded mb-2 text-sm">{pdfError}</p>}
+              <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
+                <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
+                {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-300 ${
+                  className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
                     isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
                   }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  <p className="mb-2 text-gray-600 text-sm">Drag and drop PDF files here or click to select</p>
+                  <p className="mb-1 text-gray-600 text-xs">Drag and drop PDF files here or click to select</p>
                   <input
                     type="file"
                     accept=".pdf"
@@ -1275,7 +1275,7 @@
                   />
                   <label
                     htmlFor="fileInput"
-                    className="bg-blue-600 text-white px-3 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-sm"
+                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs"
                   >
                     Select Files
                   </label>
@@ -1283,13 +1283,13 @@
               </div>
 
               {/* Dashboard */}
-              <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 mb-3">Payment Status</h2>
-                <div className="flex flex-col sm:flex-row gap-2 mb-3">
+              <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
+                <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
+                <div className="flex flex-col sm:flex-row gap-1 mb-2">
                   <select
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
-                    className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   >
                     <option value="All">All</option>
                     <option value="Paid">Paid</option>
@@ -1300,7 +1300,7 @@
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   >
                     <option value="name-asc">Name (A-Z)</option>
                     <option value="name-desc">Name (Z-A)</option>
@@ -1309,7 +1309,7 @@
                   </select>
                   <button
                     onClick={exportToCSV}
-                    className="bg-green-600 text-white px-3 py-2 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-sm"
+                    className="bg-green-600 text-white px-2 py-1 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-xs"
                   >
                     Export to CSV
                   </button>
@@ -1318,13 +1318,13 @@
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Name</th>
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Paid Amount</th>
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Transaction Date</th>
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Status</th>
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">PDF File</th>
-                        <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Name</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Paid Amount</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Transaction Date</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Status</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">PDF File</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1339,13 +1339,13 @@
                               : "bg-white hover:bg-gray-50"
                           }
                         >
-                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.name}</td>
-                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
-                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
-                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
-                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.status}</td>
-                          <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
-                          <td className="border-b border-gray-200 p-2 flex flex-wrap gap-1">
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.name}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.status}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
+                          <td className="border-b border-gray-200 p-1 flex flex-wrap gap-1">
                             <button
                               onClick={() => {
                                 const newName = prompt("Enter new name", payer.name);
@@ -1357,20 +1357,20 @@
                                   });
                                 }
                               }}
-                              className="bg-yellow-500 text-white px-2 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs"
+                              className="bg-yellow-500 text-white px-1 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs"
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => deletePayer(payer.id)}
-                              className="bg-red-500 text-white px-2 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                              className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
                             >
                               Delete
                             </button>
                             {payer.paidAmount && (
                               <button
                                 onClick={() => deletePayment(payer.id)}
-                                className="bg-gray-500 text-white px-2 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs"
+                                className="bg-gray-500 text-white px-1 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Clear Payment
                               </button>
@@ -1385,37 +1385,37 @@
 
               {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
-                <div id="invalid-receipts" className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                  <h2 className="text-lg font-semibold text-gray-800 mb-3">Invalid Receipts</h2>
+                <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Filename</th>
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Preview</th>
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Reason</th>
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Assign</th>
-                          <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invalidReceipts.map(receipt => (
                           <tr key={receipt.id} className="hover:bg-gray-50">
-                            <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{receipt.filename}</td>
-                            <td className="border-b border-gray-200 p-2 text-gray-700">
+                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.filename}</td>
+                            <td className="border-b border-gray-200 p-1 text-gray-700">
                               {receipt.pngData ? (
                                 <img 
                                   src={receipt.pngData} 
                                   alt="PDF Preview" 
-                                  className="max-w-[100px] h-auto rounded shadow-sm cursor-pointer"
+                                  className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer"
                                   onClick={() => openModal(receipt.pngData)}
                                 />
                               ) : (
                                 <span className="text-gray-500 text-xs">No preview available</span>
                               )}
                             </td>
-                            <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{receipt.reason}</td>
-                            <td className="border-b border-gray-200 p-2 flex gap-1">
+                            <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.reason}</td>
+                            <td className="border-b border-gray-200 p-1 flex gap-1">
                               <select
                                 className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                                 onChange={(e) => {
@@ -1431,10 +1431,10 @@
                                 ))}
                               </select>
                             </td>
-                            <td className="border-b border-gray-200 p-2">
+                            <td className="border-b border-gray-200 p-1">
                               <button
                                 onClick={() => deleteInvalidReceipt(receipt.id)}
-                                className="bg-red-500 text-white px-2 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
                               >
                                 Delete
                               </button>
