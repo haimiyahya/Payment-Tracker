@@ -1,3 +1,95 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Tracker</title>
+  <link rel="icon" type="image/jpeg" href="Payment-Tracker.jpg" />
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="text-xs">
+  <div id="root"></div>
+  <script type="text/javascript">
+    var gk_isXlsx = false;
+    var gk_xlsxFileLookup = {};
+    var gk_fileData = {};
+    function filledCell(cell) {
+      return cell !== '' && cell != null;
+    }
+    function loadFileData(filename) {
+      if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+        try {
+          var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+          var firstSheetName = workbook.SheetNames[0];
+          var worksheet = workbook.Sheets[firstSheetName];
+          var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+          var filteredData = jsonData.filter(row => row.some(filledCell));
+          var headerRowIndex = filteredData.findIndex((row, index) =>
+            row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+          );
+          if (headerRowIndex === -1 || headerRowIndex > 25) {
+            headerRowIndex = 0;
+          }
+          var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+          csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+          return csv;
+        } catch (e) {
+          console.error(e);
+          return "";
+        }
+      }
+      return gk_fileData[filename] || "";
+    }
+  </script>
+  <script type="text/babel">															 
     const { useState, useEffect } = React;
 
     const db = new Dexie("PaymentTrackerDB");
@@ -311,6 +403,7 @@
 
     function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal }) {
       const [isOpen, setIsOpen] = useState(false);
+
       const navItems = [
         { name: "Home", section: "dashboard" },
         { name: "Sessions", action: openSessionsModal },
@@ -327,20 +420,42 @@
               <div className="hidden sm:flex sm:space-x-1">
                 {isAuthenticated && navItems.map((item) => (
                   item.action ? (
+													 
+																		 
+																					 
                     <button key={item.name} onClick={item.action} className="px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors" >
+										 
                       {item.name}
                     </button>
                   ) : (
+													 
+																		 
+																																	 
                     <button key={item.name} onClick={() => scrollToSection(item.section)} className="px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors" >
+										 
                       {item.name}
                     </button>
                   )
                 ))}
               </div>
               <div className="sm:hidden">
+											 
+																										
                 <button onClick={() => setIsOpen(!isOpen)} className="text-white hover:bg-blue-700 p-1 rounded focus:outline-none" >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" >
+											
+																			 
+															 
+																				 
+																			 
+																											
+									 
+												 
+																					 
+																						
+																		 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16m-7 6h7"} />
+											
                   </svg>
                 </button>
               </div>
@@ -350,11 +465,19 @@
                 <div className="px-2 pt-1 pb-2 space-y-1">
                   {isAuthenticated && navItems.map((item) => (
                     item.action ? (
+														 
+																			 
+																																						
                       <button key={item.name} onClick={() => { item.action(); setIsOpen(false); }} className="block px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 w-full text-left" >
+											 
                         {item.name}
                       </button>
                     ) : (
+														 
+																			 
+																																														
                       <button key={item.name} onClick={() => { scrollToSection(item.section); setIsOpen(false); }} className="block px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 w-full text-left" >
+											 
                         {item.name}
                       </button>
                     )
@@ -424,10 +547,18 @@
       const [pdfError, setPdfError] = useState("");
       const [payers, setPayers] = useState([]);
       const [invalidReceipts, setInvalidReceipts] = useState([]);
+																																								 
+																									
+																											 
+																																 
+																													
+																																
       const [sessions, setSessions] = useState([]);
       const [deletedSessions, setDeletedSessions] = useState([]);
       const [currentSession, setCurrentSession] = useState(null);
       const [newSessionName, setNewSessionName] = useState("");
+																												
+																																 
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [selectedImage, setSelectedImage] = useState(null);
       const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
@@ -458,6 +589,7 @@
       };
 
       const closeSessionsModal = () => {
+																														 
         setIsSessionsModalOpen(false);
       };
 
@@ -561,16 +693,55 @@
             setIsAuthenticated(false);
           }
         } catch (err) {
+											 
+																									
+						 
+
+																				 
+																		 
+																								
+																		
+																							
           setError("Login failed. Please try again.");
           console.error("Login error:", err);
         } finally {
           setIsLoading(false);
+																 
+																	
+																			 
+													 
+																	 
+				
+
+																				
+													 
+										 
+																															 
+																																																								 
+												 
+																																					 
+																																												
+																	 
+													 
+																
+													
+																										
+																																												
+																	 
+													 
+																
+													
+								
+																				 
         }
       };
 
       const handleLogout = async () => {
+																						
+																		 
         setIsAuthenticated(false);
         setCurrentSession(null);
+												
         setPayers([]);
         setInvalidReceipts([]);
         try {
@@ -593,9 +764,12 @@
           const existingSession = await db.paymentSessions.where("name").equals(newSessionName).first();
           if (existingSession) {
             setError("A session with this name already exists.");
+								 
+				 
             setIsLoading(false);
             return;
           }
+																													
           const newSessionId = await db.paymentSessions.add({ name: newSessionName });
           const newSession = { id: newSessionId, name: newSessionName };
           setSessions([...sessions, newSession]);
@@ -613,6 +787,20 @@
       };
 
       const openSession = async (sessionId) => {
+												 
+																	
+												
+																 
+											 
+													
+															
+								 
+				 
+																																				 
+											 
+																				
+								 
+				 
         setIsLoading(true);
         setError("");
         try {
@@ -633,6 +821,9 @@
           setError("Failed to open session.");
           console.error("Open session error:", err);
         } finally {
+																					
+											 
+													
           setIsLoading(false);
         }
       };
@@ -646,6 +837,7 @@
           return;
         }
         try {
+																
           const sessionToDelete = await db.paymentSessions.get(currentSession.id);
           if (!sessionToDelete) {
             setError("Session to delete not found.");
@@ -655,14 +847,30 @@
           const sessionPayers = await db.payers.where("sessionId").equals(currentSession.id).toArray();
           const sessionInvalidReceipts = await db.invalidReceipts.where("sessionId").equals(currentSession.id).toArray();
           await db.deletedSessions.add({
+													
             name: sessionToDelete.name,
             payers: sessionPayers,
             invalidReceipts: sessionInvalidReceipts
           });
+																										 
           await db.payers.where("sessionId").equals(currentSession.id).delete();
           await db.invalidReceipts.where("sessionId").equals(currentSession.id).delete();
           await db.paymentSessions.delete(currentSession.id);
           setSessions(sessions.filter(s => s.id !== currentSession.id));
+																			
+																	
+																									 
+							
+																																					 
+																			 
+																 
+																					 
+																																			
+																																																				
+																
+																					
+						 
+					 
           setCurrentSession(null);
           setPayers([]);
           setInvalidReceipts([]);
@@ -692,6 +900,11 @@
           await db.payers.bulkAdd(sessionToRestore.payers.map(p => ({ ...p, sessionId: newSessionId })));
           await db.invalidReceipts.bulkAdd(sessionToRestore.invalidReceipts.map(r => ({ ...r, sessionId: newSessionId })));
           setSessions([...sessions, restoredSession]);
+																										
+																																			 
+					 
+																										 
+																																											 
           setDeletedSessions(deletedSessions.filter(s => s.id !== sessionId));
           setCurrentSession(restoredSession);
           setPayers(sessionToRestore.payers);
@@ -700,6 +913,8 @@
           setError("Failed to restore session.");
           console.error("Restore session error:", err);
         } finally {
+																											 
+																										
           setIsLoading(false);
         }
       };
@@ -756,6 +971,18 @@
         } finally {
           setIsLoading(false);
         }
+											 
+														
+																																
+													 
+																
+																		
+														
+																			
+					
+																							
+																											 
+																											
       };
 
       const processCSV = async (file) => {
@@ -765,6 +992,7 @@
           const text = await file.text();
           Papa.parse(text, {
             header: true,
+																 
             complete: async (results) => {
               if (results.errors.length > 0) {
                 setError("Error parsing CSV file. Please check the format.");
@@ -774,6 +1002,10 @@
               if (!currentSession) {
                 setError("Please select a session before uploading CSV.");
                 setIsLoading(false);
+																																 
+																																							
+																								 
+																																																	
                 return;
               }
               const validPayers = [];
@@ -831,6 +1063,15 @@
                     data: row
                   });
                 }
+																	
+											 
+																														
+																	 
+																				
+																						
+																		
+																							
+									 
               }
               if (validPayers.length > 0) {
                 await db.payers.bulkAdd(validPayers);
@@ -845,7 +1086,13 @@
               }
               if (validPayers.length > 0 && invalidData.length > 0) {
                 setError("Some payers were invalid and not added.");
+											
+																																						
               }
+							
+														 
+																																		
+																															
             }
           });
         } catch (err) {
@@ -857,10 +1104,19 @@
       };
 
       const handleCSVUpload = (event) => {
+															
+																															
+								 
+				 
         const file = event.target.files[0];
         if (file) {
           processCSV(file);
+								 
         }
+										 
+																			
+																 
+				 
       };
 
       const handleCSVDragOver = (event) => {
@@ -894,6 +1150,9 @@
         } finally {
           setIsLoading(false);
         }
+																																												 
+																								 
+																																												
       };
 
       const deletePayer = async (id) => {
@@ -944,6 +1203,10 @@
         setIsLoading(true);
         setError("");
         setPdfError("");
+				 
+																										
+											
+													 
         try {
           const validationResult = await validatePDFFile(file);
           if (!validationResult) {
@@ -951,16 +1214,79 @@
             return;
           }
           const { text, pngData } = validationResult;
+																																								
+																									 
+																							
+																												
+																																				
+					 
+																																										
+																																								
+																														 
+																																																																																																																					 
+																									 
+																 
+																					
+																						
+												
+																																			 
+										
+						 
+					 
+																											
+																																																				 
+																		 
+																									
+													
+																					 
+																																														
+					 
+																																																															
+																	
+														
           const existingPayer = payers.find(p => p.name.toLowerCase() === payerName.toLowerCase());
           if (!existingPayer) {
             setError(`Payer "${payerName}" does not exist. Please add the payer first.`);
             setIsLoading(false);
+																												
+																																																		
+					 
+																																																																									 
+																
+																																												 
+																																
+																																											
+					 
+																																						 
+														 
+																																																						 
+																																														 
             return;
           }
           const match = BM25.match(payerName, [existingPayer]);
           if (!match || match.id !== existingPayer.id) {
             setError(`Could not find a matching payer for "${payerName}". Please ensure the name is correct.`);
             setIsLoading(false);
+						 
+																																						
+																									
+																																						
+																											
+																	 
+											
+																										 
+											
+																					 
+							 
+																									 
+									
+																	 
+											
+																										 
+											
+																					 
+								
+																																																									
             return;
           }
           const formattedText = formatPDFText(text);
@@ -981,11 +1307,44 @@
             sessionId: currentSession.id
           });
           setPayers(payers.map(p => p.id === existingPayer.id ? { ...p, ...newPayerData } : p));
+																																																																														 
+						 
         } catch (err) {
           setError("Failed to process PDF and update payer.");
           console.error("PDF processing error:", err);
         } finally {
           setIsLoading(false);
+																																	
+																																																													
+																																		 
+																																																	
+					 
+																																		 
+																																					
+																								
+																																																																									 
+																
+																																												 
+																																
+																																											
+					 
+																																					
+																										
+																 
+										
+																									 
+										
+																				 
+						 
+																								 
+								
+																 
+										
+																									 
+										
+																				 
+							
+																																								
         }
       };
 
@@ -993,7 +1352,12 @@
         const file = event.target.files[0];
         if (file) {
           processPDF(file, payerName);
+								 
         }
+												
+																			
+																 
+				 
       };
 
       const handlePDFDragOver = (event) => {
@@ -1017,6 +1381,24 @@
 
       const filterPayers = (term) => {
         setSearchTerm(term);
+																							
+								 
+				 
+																																	 
+																																			
+																																																		 
+																					 
+																										 
+																
+									
+																				
+					 
+																									 
+																				
+																																																																									 
+					 
+																																				 
+												
       };
 
       const sortPayers = (key) => {
@@ -1058,7 +1440,22 @@
           setError("No payers selected to generate PDF");
           return;
         }
+														 
+																	
+									 
+														 
+					 
+																																						
+																													 
+																							
+																							
+										 
+																																																										
+									
+																 
+				
 
+																 
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({
           orientation: orientation, // Use parameter
@@ -1084,6 +1481,11 @@
           ]),
           styles: {
             cellPadding: 1,
+											 
+										 
+													
+										 
+												
             fontSize: 8,
             overflow: 'linebreak',
             fontStyle: 'normal'
@@ -1093,6 +1495,7 @@
             1: { cellWidth: 25 },
             2: { cellWidth: 25 },
             3: { cellWidth: 35 },
+																					 
             4: { cellWidth: 25 }
           }
         };
@@ -1114,12 +1517,36 @@
       const handlePrintButtonClick = (selectedPayers) => {
         generatePDF(selectedPayers, printOrientation, printColorMode);
       };
+																																			 
+																																				
+																																						 
+																																							
+				 
 
       const togglePayerSelection = (payerId) => {
         setSelectedPayers(prevSelected =>
           prevSelected.includes(payerId)
             ? prevSelected.filter(id => id !== payerId)
             : [...prevSelected, payerId]
+																																												 
+																					 
+											
+																 
+																	
+																															 
+																							
+																																																																											 
+													
+									
+											 
+															 
+																																																																											 
+								 
+											 
+												 
+										 
+									
+								
         );
       };
 
@@ -1140,6 +1567,7 @@
             scrollToSection={scrollToSection}
             openSessionsModal={openSessionsModal}
           />
+																						 
           {isLoading && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="text-white text-lg">Loading...</div>
@@ -1217,14 +1645,20 @@
                   <input
                     type="text"
                     name="name"
+																																												
                     placeholder="Payer Name"
+																																																																										
                     required
                     className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   />
                   <input
                     type="number"
                     name="expectedAmount"
+																																																	
                     placeholder="Expected Amount (RM)"
+															 
+													 
+																																																																										
                     required
                     className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   />
@@ -1242,6 +1676,8 @@
                 <h3 className="text-lg font-semibold mb-3 text-gray-800">Bulk Upload (CSV)</h3>
                 <div
                   onDrop={handleCSVDrop}
+																																															 
+										 
                   onDragOver={handleCSVDragOver}
                   onDragLeave={handleCSVDragLeave}
                   className="border-2 border-dashed border-gray-300 rounded-md p-4 text-center cursor-pointer hover:border-blue-500 transition-colors text-xs"
@@ -1254,7 +1690,10 @@
                     className="hidden"
                     id="csv-upload"
                   />
+												
+																			
                   <label htmlFor="csv-upload" className="bg-blue-500 text-white px-3 py-1 rounded mt-2 inline-block cursor-pointer hover:bg-blue-600 text-xs">
+									 
                     Choose File
                   </label>
                 </div>
@@ -1282,6 +1721,11 @@
                   onDragOver={handlePDFDragOver}
                   onDragLeave={handlePDFDragLeave}
                   className="border-2 border-dashed border-gray-300 rounded-md p-4 text-center cursor-pointer hover:border-blue-500 transition-colors text-xs"
+																																														
+										 
+																						 
+																							 
+																		 
                 >
                   <p>Drag and drop PDF receipt here, or click to select file.</p>
                   <input
@@ -1298,8 +1742,11 @@
                     className="hidden"
                     id="pdf-upload"
                   />
+												
+																			 
                   <label htmlFor="pdf-upload" className="bg-blue-500 text-white px-3 py-1 rounded mt-2 inline-block cursor-pointer hover:bg-blue-600 text-xs">
                     Choose File
+																
                   </label>
                 </div>
                 {pdfError && <p className="text-red-500 mt-2 text-xs">{pdfError}</p>}
@@ -1309,11 +1756,18 @@
                 <input
                   type="text"
                   placeholder="Search payers..."
+												 
                   value={searchTerm}
                   onChange={(e) => filterPayers(e.target.value)}
                   className="p-2 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                 />
+																										
+																											
+																													
+																																
+																																						
                 <select
+												 
                   value={filterConfig}
                   onChange={(e) => setFilterConfig(e.target.value)}
                   className="p-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
@@ -1331,8 +1785,17 @@
                       <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">
                         <button onClick={() => sortPayers('name')} className="text-left">
                           Name {sortConfig.key === 'name' && (sortConfig.direction === 'ascending' ? '▲' : '▼')}
+												 
+																				 
+																																																																														
+									 
+																 
                         </button>
                       </th>
+																								 
+																														
+													 
+																									
                       <th className="border-b border-gray-200 p-2 text-left text-gray-700 font-semibold text-xs">
                         <button onClick={() => sortPayers('expectedAmount')} className="text-left">
                           Expected Amount (RM) {sortConfig.key === 'expectedAmount' && (sortConfig.direction === 'ascending' ? '▲' : '▼')}
@@ -1360,7 +1823,16 @@
                   </thead>
                   <tbody>
                     {sortedAndFilteredPayers().map(payer => (
+														
+																				 
+																		 
+																										
+																																 
+																														 
+																																	 
                       <tr key={payer.id} className="hover:bg-gray-50">
+													 
+												 
                         <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.name}</td>
                         <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.expectedAmount}</td>
                         <td className="border-b border-gray-200 p-2 text-gray-700 text-xs">{payer.paidAmount ? payer.paidAmount : "-"}</td>
@@ -1424,16 +1896,57 @@
                             onChange={() => togglePayerSelection(payer.id)}
                             className="text-xs"
                           />
+																						 
+																			 
+															
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+											
               </div>
               <button
                 onClick={() => handlePrintButtonClick(selectedPayers)}
                 className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4 text-sm"
                 disabled={selectedPayers.length === 0}
+																									 
+																															
+														 
+																										
+																																																																	
+																																																																 
+																																																																
+																																																																
+																																																																 
+														 
+															
+														 
+																												 
+																																						
+																																																											
+																																											 
+																									
+																		 
+																												
+																										
+																																																	
+																																						
+																	
+																	 
+																																																	 
+																
+																 
+																																																										
+																																										
+																		 
+																																																																												 
+																									
+																																				
+																							 
+																																											
+																	 
+																	
               >
                 Print {selectedPayers.length > 0 && `(${selectedPayers.length})`}
               </button>
@@ -1449,10 +1962,48 @@
                 setZoom={setPrintZoom}
                 printDocument={handlePrint}
               />
+															 
+													 
+															
+														
+												
+											
+								
             </div>
           )}
+												
+																	
+																	
+																			
+							
+													 
+																					
+																					
+																 
+																							 
+																						 
+																			 
+																										 
+																									 
+																	 
+																										 
+																 
+																				 
+																						 
+																									 
+																			 
+																								 
+																					 
+																						 
+																																 
+																					 
+							
+								
         </div>
       );
     }
 
     ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
