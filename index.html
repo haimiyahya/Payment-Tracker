@@ -525,6 +525,7 @@
           return;
         }
         setIsLoading(true);
+        setError(""); // Clear any previous error before proceeding
         setTimeout(async () => {
           const session = { name: newSessionName.trim() };
           const sessionId = await db.paymentSessions.add(session);
@@ -534,8 +535,6 @@
           setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
-          setError("");
-          setPdfError("");
           setIsLoading(false);
         }, 500);
       };
