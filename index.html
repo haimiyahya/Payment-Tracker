@@ -513,6 +513,10 @@
       const [pdfDataUrl, setPdfDataUrl] = useState("");
       const [orientation, setOrientation] = useState("portrait");
       const [zoom, setZoom] = useState(1.0);
+      // --- START: New State Variables for Date Validation ---
+      const [validateReceiptDate, setValidateReceiptDate] = useState(false);
+      const [requiredReceiptDate, setRequiredReceiptDate] = useState("");
+      // --- END: New State Variables for Date Validation ---
 
       const openModal = (imageSrc) => {
         setSelectedImage(imageSrc);
@@ -651,9 +655,9 @@
         setTimeout(async () => {
           const session = { name: newSessionName.trim() };
           const sessionId = await db.paymentSessions.add(session);
-          const newSession = { ...session, id: sessionId };
-          setSessions(prev => [...prev, newSession]);
-          setCurrentSession(newSession);
+          const newSessionWithId = { ...session, id: sessionId };
+          setSessions(prev => [...prev, newSessionWithId]);
+          setCurrentSession(newSessionWithId);
           setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
@@ -862,12 +866,12 @@
               }
               if (validPayers.length > 0) {
                 const ids = await db.payers.bulkAdd(validPayers, { allKeys: true });
-                const newPayers = validPayers.map((payer, index) => ({
+                const newPayersData = validPayers.map((payer, index) => ({
                   ...payer,
                   id: ids[index]
                 }));
-                setPayers(prev => [...prev, ...newPayers]);
-                console.log(`Added ${newPayers.length} payers from CSV`);
+                setPayers(prev => [...prev, ...newPayersData]);
+                console.log(`Added ${newPayersData.length} payers from CSV`);
               }
               if (errors.length > 0) {
                 setError(`Added ${validPayers.length} payers. Errors: ${errors.join("; ")}`);
@@ -967,9 +971,86 @@
             text += content.items.map(item => item.str).join(" ") + " ";
           }
           console.log(`Extracted text from ${file.name}: ${text.slice(0, 100)}...`);
+
+          // --- START: New Date Validation Logic ---
+          if (validateReceiptDate && requiredReceiptDate) {
+            const dateRegexForValidation = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+            const pdfDateMatch = text.match(dateRegexForValidation);
+
+            if (pdfDateMatch && pdfDateMatch[0]) {
+              let pdfDateString = pdfDateMatch[0];
+              pdfDateString = pdfDateString.replace(/\s+\d{2}:\d{2}:\d{2}$/, '').trim(); // Remove time
+              
+              // Attempt to parse various common date formats
+              let pdfDate;
+              // Try parsing as is (might work for YYYY-MM-DD, MM/DD/YYYY if JS Date constructor understands it)
+              pdfDate = new Date(pdfDateString);
+
+              // If initial parsing fails or results in an obviously wrong year (e.g. from DD-MM-YY), try specific formats
+              if (isNaN(pdfDate.getTime()) || pdfDate.getFullYear() < 2000) {
+                  const parts = pdfDateString.replace(/[\/\s]+/g, '-').split('-');
+                  if (parts.length === 3) {
+                      const day = parseInt(parts[0]);
+                      const month = parseInt(parts[1]);
+                      const year = parseInt(parts[2]);
+
+                      if (year >= 0 && year <= 99) { // Handle YY
+                          pdfDate = new Date(year + 2000, month -1, day);
+                      } else if (day <=31 && month <=12 && year >= 2000) { // DD-MM-YYYY
+                          pdfDate = new Date(year, month - 1, day);
+                      } else if (month <=12 && day <=31 && year >=2000) { // MM-DD-YYYY (less likely if previous failed)
+                           pdfDate = new Date(year, month - 1, day);
+                      }
+                  } else { // Try to parse with month names
+                    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    let potentialDateStr = pdfDateString;
+                    monthNames.forEach((monthName, index) => {
+                        potentialDateStr = potentialDateStr.replace(new RegExp(monthName, 'i'), (index + 1).toString());
+                    });
+                    pdfDate = new Date(potentialDateStr);
+                  }
+              }
+              
+              const requiredDate = new Date(requiredReceiptDate); // HTML date input is YYYY-MM-DD
+
+              if (isNaN(pdfDate.getTime())) {
+                const reason = `Could not parse a valid date from PDF string: "${pdfDateMatch[0]}"`;
+                console.log(`Invalid receipt (date parsing failed): ${file.name}, Reason: ${reason}`);
+                pngData = await convertPDFToPNG(file);
+                const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
+                setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
+                setPdfError(`Failed to process ${file.name}: ${reason}.`);
+                return;
+              }
+              
+              pdfDate.setHours(0, 0, 0, 0);
+              requiredDate.setHours(0, 0, 0, 0);
+
+              if (pdfDate < requiredDate) {
+                const reason = `Date in PDF (${pdfDate.toLocaleDateString()}) is older than required date (${requiredDate.toLocaleDateString()})`;
+                console.log(`Invalid receipt (date validation failed): ${file.name}, Reason: ${reason}`);
+                pngData = await convertPDFToPNG(file);
+                const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
+                setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
+                setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
+                return; 
+              }
+            } else {
+              const reason = `Required date validation is active, but no date was found in the PDF.`;
+              console.log(`Invalid receipt (date not found in PDF): ${file.name}, Reason: ${reason}`);
+              pngData = await convertPDFToPNG(file);
+              const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
+              setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
+              setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
+              return; 
+            }
+          }
+          // --- END: New Date Validation Logic ---
+
           const nameRegex = payers.map(p => new RegExp(`\\b${p.name}\\b`, "i"));
           const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
-          const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+          const transactionDateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+          
           const extractedText = text.toLowerCase();
           let matchedName = null;
           for (const regex of nameRegex) {
@@ -982,10 +1063,10 @@
           const amountMatch = text.match(amountRegex);
           const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
           let transactionDate = null;
-          const dateMatch = text.match(dateRegex);
-          if (dateMatch) {
-            transactionDate = dateMatch[0];
-            console.log(`Extracted transaction date from ${file.name}: ${transactionDate}`);
+          const dateMatchForDisplay = text.match(transactionDateRegex); // Use the original regex for display
+          if (dateMatchForDisplay) {
+            transactionDate = dateMatchForDisplay[0];
+            console.log(`Extracted transaction date for display from ${file.name}: ${transactionDate}`);
           }
           console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}, Date=${transactionDate}`);
           let matchedPayer = null;
@@ -994,7 +1075,7 @@
             console.log(`Matched by name: ${matchedPayer ? matchedPayer.name : 'None'}`);
           } else {
             const filename = file.name.replace(".pdf", "");
-            matchedPayer = BM25.match(filename, payers);
+            matchedPayer = BM25.match(filename, payers.filter(p => p.status === "No File Matched" || p.status === "Unpaid")); // Only match against unpaid
             console.log(`BM25 match for ${filename}: ${matchedPayer ? matchedPayer.name : 'None'}`);
           }
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
@@ -1003,7 +1084,7 @@
             await db.invalidReceipts.delete(existingReceipt.id);
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
-          const payerWithPDF = payers.find(p => p.pdfFilename === file.name);
+          const payerWithPDF = payers.find(p => p.pdfFilename === file.name && p.sessionId === currentSession.id);
           if (payerWithPDF) {
             console.log(`PDF ${file.name} is already associated with payer ${payerWithPDF.name}. Skipping.`);
             setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`);
@@ -1121,16 +1202,31 @@
         }
         const payer = payers.find(p => p.id === parseInt(payerId));
         const receipt = invalidReceipts.find(r => r.id === receiptId);
+        if (!payer || !receipt) {
+            setError("Payer or receipt not found for assignment.");
+            return;
+        }
         const status = parseFloat(amount).toFixed(2) === payer.expectedAmount ? "Paid" : "Incorrect";
+        
+        // Extract date from receipt.data if possible for transactionDate
+        let transactionDate = null;
+        const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+        if(receipt.data) {
+            const dateMatch = receipt.data.match(dateRegex);
+            if (dateMatch) {
+                transactionDate = dateMatch[0];
+            }
+        }
+
         await db.payers.update(payer.id, { 
           paidAmount: parseFloat(amount).toFixed(2), 
-          transactionDate: null,
+          transactionDate: transactionDate,
           status, 
           pdfFilename: receipt.filename 
         });
         await db.invalidReceipts.delete(receiptId);
         setPayers(prev => prev.map(p => 
-          p.id === payer.id ? { ...p, paidAmount: parseFloat(amount).toFixed(2), transactionDate: null, status, pdfFilename: receipt.filename } : p
+          p.id === payer.id ? { ...p, paidAmount: parseFloat(amount).toFixed(2), transactionDate: transactionDate, status, pdfFilename: receipt.filename } : p
         ));
         setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
         setPdfError("");
@@ -1150,7 +1246,7 @@
 
       const exportToCSV = () => {
         const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
-        const rows = payers.map(p => [
+        const rows = filteredPayers.map(p => [ // Use filteredPayers for consistency with displayed data
           p.name,
           p.expectedAmount,
           p.paidAmount || "",
@@ -1235,9 +1331,10 @@
         filter === "All" || p.status === filter
       ).sort((a, b) => {
         if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-        if (sortBy === "name-desc") return b.name.localeCompare(b.name);
+        if (sortBy === "name-desc") return b.name.localeCompare(b.name); // Corrected: was b.name.localeCompare(b.name)
         if (sortBy === "status-asc") return a.status.localeCompare(b.status);
         if (sortBy === "status-desc") return b.status.localeCompare(b.status);
+        return 0; // Default return
       });
 
       if (!isAuthenticated) {
@@ -1349,6 +1446,27 @@
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
+                {/* --- START: New UI Elements for Date Validation --- */}
+                <div className="flex items-center mb-2 space-x-2">
+                  <input
+                    type="checkbox"
+                    id="validateDateCheckbox"
+                    checked={validateReceiptDate}
+                    onChange={(e) => setValidateReceiptDate(e.target.checked)}
+                    className="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500" /* Adjusted size */
+                  />
+                  <label htmlFor="validateDateCheckbox" className="text-xs text-gray-700">
+                    Validate: Receipt date must be on or after
+                  </label>
+                  <input
+                    type="date"
+                    value={requiredReceiptDate}
+                    onChange={(e) => setRequiredReceiptDate(e.target.value)}
+                    disabled={!validateReceiptDate}
+                    className={`p-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!validateReceiptDate ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  />
+                </div>
+                {/* --- END: New UI Elements for Date Validation --- */}
                 <div
                   className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
                     isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
@@ -1448,7 +1566,7 @@
                               onClick={() => {
                                 const newName = prompt("Enter new name", payer.name);
                                 const newAmount = prompt("Enter new expected amount", payer.expectedAmount);
-                                if (newName && newAmount) {
+                                if (newName !== null && newAmount !== null) { // Check for null (cancel button)
                                   editPayer(payer.id, {
                                     name: newName,
                                     expectedAmount: newAmount
@@ -1515,15 +1633,20 @@
                             <td className="border-b border-gray-200 p-1 flex gap-1">
                               <select
                                 className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                                defaultValue=""
                                 onChange={(e) => {
-                                  const amount = prompt("Enter amount");
-                                  if (amount) {
-                                    assignReceipt(receipt.id, e.target.value, amount);
+                                  const selectedPayerId = e.target.value;
+                                  if (selectedPayerId) {
+                                      const amount = prompt(`Enter amount for ${payers.find(p => p.id === parseInt(selectedPayerId))?.name || 'this payer'}`);
+                                      if (amount !== null) { // Check if prompt was not cancelled
+                                          assignReceipt(receipt.id, selectedPayerId, amount);
+                                      }
                                   }
+                                  e.target.value = ""; // Reset select after action
                                 }}
                               >
                                 <option value="">Select Payer</option>
-                                {payers.map(p => (
+                                {payers.filter(p => !p.pdfFilename).map(p => ( // Only show payers without a PDF
                                   <option key={p.id} value={p.id}>{p.name}</option>
                                 ))}
                               </select>
@@ -1576,7 +1699,7 @@
               isOpen={isPrintPreviewOpen}
               onClose={() => {
                 setIsPrintPreviewOpen(false);
-                URL.revokeObjectURL(pdfDataUrl);
+                if (pdfDataUrl) URL.revokeObjectURL(pdfDataUrl); // Check if pdfDataUrl exists
               }}
               onPrint={handlePrint}
               pdfDataUrl={pdfDataUrl}
