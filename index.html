@@ -342,12 +342,82 @@
       );
     }
 
-    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal }) {
+    function ChangePasswordModal({ isOpen, onClose, handleChangePassword, error }) {
+      const [originalPassword, setOriginalPassword] = useState("");
+      const [newPassword, setNewPassword] = useState("");
+      const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
+      if (!isOpen) return null;
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        handleChangePassword(originalPassword, newPassword, confirmNewPassword);
+        setOriginalPassword("");
+        setNewPassword("");
+        setConfirmNewPassword("");
+      };
+
+      return (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={onClose}
+        >
+          <div 
+            className="bg-white p-3 rounded-lg shadow-xl max-w-sm w-full relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
+            >
+              ×
+            </button>
+            <h2 className="text-base font-semibold text-gray-800 mb-2">Change Password</h2>
+            {error && <p className="text-red-500 mb-2 text-xs">{error}</p>}
+            <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+              <input
+                type="password"
+                value={originalPassword}
+                onChange={(e) => setOriginalPassword(e.target.value)}
+                placeholder="Original Password"
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                required
+              />
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="New Password"
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                required
+              />
+              <input
+                type="password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                placeholder="Confirm New Password"
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                required
+              />
+              <button
+                type="submit"
+                className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+              >
+                Change Password
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal, openChangePasswordModal }) {
       const [isOpen, setIsOpen] = useState(false);
 
       const navItems = [
         { name: "Home", section: "dashboard" },
         { name: "Sessions", action: openSessionsModal },
+        { name: "Change Password", action: openChangePasswordModal },
         { name: "Logout", action: handleLogout },
       ];
 
@@ -435,11 +505,7 @@
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [password, setPassword] = useState("");
       const [confirmPassword, setConfirmPassword] = useState("");
-      const [currentPassword, setCurrentPassword] = useState("");
-      const [newPassword, setNewPassword] = useState("");
-      const [confirmNewPassword, setConfirmNewPassword] = useState("");
       const [error, setError] = useState("");
-      const [successMessage, setSuccessMessage] = useState("");
       const [pdfError, setPdfError] = useState("");
       const [payers, setPayers] = useState([]);
       const [invalidReceipts, setInvalidReceipts] = useState([]);
@@ -455,11 +521,13 @@
       const [isLoading, setIsLoading] = useState(false);
       const [deletedSessions, setDeletedSessions] = useState([]);
       const [isModalOpen, setIsModalOpen] = useState(false);
-      const [selectedImage, setSelectedImage] = useState(null);
       const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
+      const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+      const [changePasswordError, setChangePasswordError] = useState("");
       const [restrictDate, setRestrictDate] = useState(false);
       const [minDate, setMinDate] = useState("");
       const [isSettingNewPassword, setIsSettingNewPassword] = useState(false);
+      const [selectedImage, setSelectedImage] = useState(null);
 
       const openModal = (imageSrc) => {
         setSelectedImage(imageSrc);
@@ -476,8 +544,36 @@
       };
 
       const closeSessionsModal = () => {
-        if (sessions.length === 0 && !currentSession) return; // Prevent closing if no session
+        if (sessions.length === 0 && !currentSession) return;
         setIsSessionsModalOpen(false);
+      };
+
+      const openChangePasswordModal = () => {
+        setIsChangePasswordModalOpen(true);
+        setChangePasswordError("");
+      };
+
+      const closeChangePasswordModal = () => {
+        setIsChangePasswordModalOpen(false);
+        setChangePasswordError("");
+      };
+
+      const handleChangePassword = async (originalPassword, newPassword, confirmNewPassword) => {
+        setChangePasswordError("");
+        if (newPassword !== confirmNewPassword) {
+          setChangePasswordError("New passwords do not match");
+          return;
+        }
+        const storedKey = await db.settings.get("passwordKey");
+        const derivedKey = CryptoJS.PBKDF2(originalPassword, "salt", { keySize: 256/32, iterations: 150000 }).toString();
+        if (storedKey.value !== derivedKey) {
+          setChangePasswordError("Original password is incorrect");
+          return;
+        }
+        const newDerivedKey = CryptoJS.PBKDF2(newPassword, "salt", { keySize: 256/32, iterations: 150000 }).toString();
+        await db.settings.put({ key: "passwordKey", value: newDerivedKey });
+        setError("Password changed successfully");
+        closeChangePasswordModal();
       };
 
       const loadData = async () => {
@@ -587,39 +683,11 @@
         }
       };
 
-      const handleChangePassword = async (e) => {
-        e.preventDefault();
-        setError("");
-        setSuccessMessage("");
-        const storedKey = await db.settings.get("passwordKey");
-        const derivedCurrentKey = CryptoJS.PBKDF2(currentPassword, "salt", { keySize: 256/32, iterations: 150000 }).toString();
-        if (storedKey.value !== derivedCurrentKey) {
-          setError("Current password is incorrect");
-          return;
-        }
-        if (!newPassword) {
-          setError("Please enter a new password");
-          return;
-        }
-        if (newPassword !== confirmNewPassword) {
-          setError("New passwords do not match");
-          return;
-        }
-        const newDerivedKey = CryptoJS.PBKDF2(newPassword, "salt", { keySize: 256/32, iterations: 150000 }).toString();
-        await db.settings.put({ key: "passwordKey", value: newDerivedKey });
-        setSuccessMessage("Password changed successfully");
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmNewPassword("");
-        resetSessionTimeout();
-      };
-
       const handleLogout = async () => {
         await db.settings.delete("session");
         clearTimeout(sessionTimeout);
         setIsAuthenticated(false);
         setError("");
-        setSuccessMessage("");
         setPdfError("");
         setPayers([]);
         setInvalidReceipts([]);
@@ -1311,13 +1379,11 @@
             handleLogout={handleLogout}
             scrollToSection={scrollToSection}
             openSessionsModal={openSessionsModal}
+            openChangePasswordModal={openChangePasswordModal}
           />
           <div className="max-w-5xl mx-auto">
             {error && (
               <p className="text-red-500 bg-red-50 p-1 rounded mb-2 text-xs animate-pulse">{error}</p>
-            )}
-            {successMessage && (
-              <p className="text-green-500 bg-green-50 p-1 rounded mb-2 text-xs animate-pulse">{successMessage}</p>
             )}
             {isLoading && (
               <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
@@ -1332,43 +1398,6 @@
                   {currentSession.name}
                 </h3>
               )}
-
-              {/* Change Password Form */}
-              <div id="change-password" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
-                <h2 className="text-base font-semibold text-gray-800 mb-2">Change Password</h2>
-                <form onSubmit={handleChangePassword} className="flex flex-col gap-1 mb-2">
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Current Password"
-                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                    required
-                  />
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="New Password"
-                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                    required
-                  />
-                  <input
-                    type="password"
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    placeholder="Confirm New Password"
-                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                  >
-                    Change Password
-                  </button>
-                </form>
-              </div>
 
               {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
@@ -1440,7 +1469,7 @@
                     type="date"
                     value={minDate}
                     onChange={(e) => setMinDate(e.target.value)}
-                    disabled={!restrictDate}
+                    disabled={!resistDate}
                     className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   />
                 </div>
@@ -1663,6 +1692,12 @@
               permanentlyDeleteSession={permanentlyDeleteSession}
               clearTrashBin={clearTrashBin}
             />
+            <ChangePasswordModal 
+              isOpen={isChangePasswordModalOpen}
+              onClose={closeChangePasswordModal}
+              handleChangePassword={handleChangePassword}
+              error={changePasswordError}
+            />
           </div>
         </div>
       );
@@ -1670,6 +1705,5 @@
 
     ReactDOM.render(<App />, document.getElementById("root"));
   </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93c7f0d9e9d3bff6',t:'MTc0NjY5NjY1MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 </html>
