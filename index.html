@@ -11,15 +11,23 @@
                 var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
                 var firstSheetName = workbook.SheetNames[0];
                 var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
                 var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
                 var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
                 var headerRowIndex = filteredData.findIndex((row, index) =>
                   row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
                 );
+                // Fallback
                 if (headerRowIndex === -1 || headerRowIndex > 25) {
                   headerRowIndex = 0;
                 }
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
                 csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
                 return csv;
             } catch (e) {
@@ -42,9 +50,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script src="https="cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="text-xs">
@@ -82,15 +88,72 @@
     }
   </script>
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect } = React;
 
     const db = new Dexie("PaymentTrackerDB");
+    db.version(4).stores({
+      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
+      invalidReceipts: "++id,filename,reason,data,sessionId",
+      settings: "key,value",
+      paymentSessions: "++id,name",
+      deletedSessions: "++id,name,students,invalidReceipts"
+    });
+    db.version(5).stores({
+      payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
+      invalidReceipts: "++id,filename,reason,data,sessionId",
+      settings: "key,value",
+      paymentSessions: "++id,name",
+      deletedSessions: "++id,name,payers,invalidReceipts"
+    }).upgrade(async (tx) => {
+      console.log("Upgrading database from version 4 to 5");
+      try {
+        const students = await tx.table("students").toArray();
+        if (students.length > 0) {
+          console.log(`Migrating ${students.length} students to payers`);
+          await tx.table("payers").bulkAdd(students);
+          console.log("Migration completed: students copied to payers");
+        }
+        const deletedSessions = await tx.table("deletedSessions").toArray();
+        if (deletedSessions.length > 0) {
+          console.log(`Updating ${deletedSessions.length} deleted sessions`);
+          await tx.table("deletedSessions").bulkPut(
+            deletedSessions.map(session => ({
+              ...session,
+              payers: session.students || [],
+              students: undefined
+            }))
+          );
+          console.log("Migration completed: updated deletedSessions");
+        }
+        await tx.table("students").clear();
+        console.log("Cleared old students table");
+      } catch (err) {
+        console.error("Error during database migration:", err);
+      }
+    });
     db.version(6).stores({
       payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
       invalidReceipts: "++id,filename,reason,data,pngData,sessionId",
       settings: "key,value",
       paymentSessions: "++id,name",
       deletedSessions: "++id,name,payers,invalidReceipts"
+    }).upgrade(async (tx) => {
+      console.log("Upgrading database from version 5 to 6");
+      try {
+        const invalidReceipts = await tx.table("invalidReceipts").toArray();
+        if (invalidReceipts.length > 0) {
+          console.log(`Updating ${invalidReceipts.length} invalid receipts to include pngData`);
+          await tx.table("invalidReceipts").bulkPut(
+            invalidReceipts.map(receipt => ({
+              ...receipt,
+              pngData: null
+            }))
+          );
+          console.log("Migration completed: added pngData to invalidReceipts");
+        }
+      } catch (err) {
+        console.error("Error during database migration to version 6:", err);
+      }
     });
 
     const BM25 = {
@@ -109,8 +172,15 @@
         return score;
       },
       match: (query, documents) => {
+        console.log(`BM25.match: Query=${query}, Documents=${JSON.stringify(documents.map(d => ({ id: d.id, name: d.name })))}`);
         const tokens = BM25.tokenize(query);
-        const docTokens = documents.map(doc => ({ id: doc.id, name: doc.name, tokens: BM25.tokenize(doc.name) }));
+        console.log(`BM25.match: Query tokens=${tokens}`);
+        const docTokens = documents.map(doc => ({
+          id: doc.id,
+          name: doc.name,
+          tokens: BM25.tokenize(doc.name)
+        }));
+        console.log(`BM25.match: Doc tokens=${JSON.stringify(docTokens.map(dt => ({ id: dt.id, name: dt.name, tokens: dt.tokens })))}`);
         const docLengths = docTokens.map(dt => dt.tokens.length);
         const avgDocLength = docLengths.reduce((a, b) => a + b, 0) / docLengths.length || 1;
         const idf = {};
@@ -118,23 +188,305 @@
           const docsWithTerm = docTokens.filter(dt => dt.tokens.includes(term)).length;
           idf[term] = Math.log((documents.length - docsWithTerm + 0.5) / (docsWithTerm + 0.5) + 1);
         });
-        const scores = docTokens.map(dt => ({ id: dt.id, name: dt.name, score: BM25.computeScore(tokens, dt.tokens, dt.tokens.length, avgDocLength, idf) }));
+        const scores = docTokens.map(dt => ({
+          id: dt.id,
+          name: dt.name,
+          score: BM25.computeScore(tokens, dt.tokens, dt.tokens.length, avgDocLength, idf)
+        }));
+        console.log(`BM25.match: Scores=${JSON.stringify(scores)}`);
         const sorted = scores.sort((a, b) => b.score - a.score);
         if (sorted[0] && sorted[0].score > BM25.threshold) {
           const topScore = sorted[0].score;
           const closeScores = sorted.filter(s => s.score >= topScore * 0.9);
-          if (closeScores.length === 1) return sorted[0];
+          if (closeScores.length === 1) {
+            console.log(`BM25.match: Returning match=${JSON.stringify(sorted[0])}`);
+            return sorted[0];
+          }
         }
+        console.log(`BM25.match: No match found`);
         return null;
       }
     };
 
-    const formatPDFText = (text) => { /* ... (keep existing function as is) ... */ };
-    const convertPDFToPNG = async (file) => { /* ... (keep existing function as is) ... */ };
-    function ImageModal({ isOpen, onClose, imageSrc }) { /* ... (keep existing component as is) ... */ }
-    function PrintPreviewModal({ isOpen, onClose, onPrint, pdfDataUrl, setOrientation, setZoom }) { /* ... (keep existing component as is) ... */ }
-    function SessionsModal({ /* ... props ... */ }) { /* ... (keep existing component as is) ... */ }
-    function NavBar({ /* ... props ... */ }) { /* ... (keep existing component as is) ... */ }
+    const formatPDFText = (text) => {
+      if (!text || typeof text !== "string") return "No text available";
+      let cleaned = text.replace(/[\x00-\x1F\x7F]+/g, " ");
+      cleaned = cleaned.replace(/\s+/g, " ").trim();
+      const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
+      const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+      const refNumberRegex = /\b\d{10}\b/;
+      const otherDetailsRegex = /\bYURAN\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4}\b/;
+      const amountMatch = cleaned.match(amountRegex);
+      const dateMatch = cleaned.match(dateRegex);
+      const refNumberMatch = cleaned.match(refNumberRegex);
+      const otherDetailsMatch = cleaned.match(otherDetailsRegex);
+      let prioritizedText = "";
+      if (dateMatch) prioritizedText += `Date: ${dateMatch[0]}\n`;
+      if (amountMatch) prioritizedText += `Amount: ${amountMatch[0]}\n`;
+      if (refNumberMatch) prioritizedText += `Reference Number: ${refNumberMatch[0]}\n`;
+      if (otherDetailsMatch) prioritizedText += `Other Transfer Details: ${otherDetailsMatch[0]}\n`;
+      let remainingText = cleaned;
+      if (amountMatch) remainingText = remainingText.replace(amountMatch[0], "").replace(/\s+/g, " ").trim();
+      if (dateMatch) remainingText = remainingText.replace(dateMatch[0], "").replace(/\s+/g, " ").trim();
+      if (refNumberMatch) remainingText = remainingText.replace(refNumberMatch[0], "").replace(/\s+/g, " ").trim();
+      if (otherDetailsMatch) remainingText = remainingText.replace(otherDetailsMatch[0], "").replace(/\s+/g, " ").trim();
+      prioritizedText += remainingText;
+      if (prioritizedText.length > 500) {
+        prioritizedText = prioritizedText.substring(0, 500) + "...";
+      }
+      return prioritizedText || "No text available";
+    };
+
+    const convertPDFToPNG = async (file) => {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.0 });
+        const scale = 400 / viewport.width;
+        const scaledViewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = scaledViewport.width;
+        canvas.height = scaledViewport.height;
+        const context = canvas.getContext("2d");
+        await page.render({
+          canvasContext: context,
+          viewport: scaledViewport
+        }).promise;
+        const pngData = canvas.toDataURL("image/png");
+        return pngData;
+      } catch (err) {
+        console.error(`Error converting PDF ${file.name} to PNG:`, err);
+        return null;
+      }
+    };
+
+    function ImageModal({ isOpen, onClose, imageSrc }) {
+      if (!isOpen || !imageSrc) return null;
+
+      return (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={onClose}
+        >
+          <div 
+            className="bg-white p-2 rounded-lg shadow-xl max-w-2xl w-full relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
+            >
+              ×
+            </button>
+            <h3 className="text-xs font-semibold text-gray-800 mb-1">Receipt Preview</h3>
+            <img 
+              src={imageSrc} 
+              alt="Receipt Preview Decker" 
+              className="max-w-[300px] h-auto rounded shadow-sm"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    function SessionsModal({ isOpen, onClose, sessions, deletedSessions, currentSession, setSessions, setDeletedSessions, setCurrentSession, setPayers, setInvalidReceipts, setError, setIsLoading, newSessionName, setNewSessionName, openSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, clearTrashBin }) {
+      if (!isOpen) return null;
+
+      const mustCreateSession = sessions.length === 0 && !currentSession;
+
+      return (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={mustCreateSession ? null : onClose}
+        >
+          <div 
+            className="bg-white p-3 rounded-lg shadow-xl max-w-lg w-full relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className={`absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm ${mustCreateSession ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={mustCreateSession}
+            >
+              ×
+            </button>
+            <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Sessions</h2>
+            {mustCreateSession && (
+              <p className="text-red-500 mb-2 text-xs">Please create a session to continue.</p>
+            )}
+            <div className="flex flex-col sm:flex-row gap-1 mb-2">
+              <input
+                type="text"
+                value={newSessionName}
+                onChange={(e) => setNewSessionName(e.target.value)}
+                placeholder="New Session Name (e.g., Book Payments)"
+                className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+              />
+              <button
+                onClick={createNewSession}
+                className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+              >
+                New Session
+              </button>
+              <select
+                onChange={(e) => openSession(e.target.value)}
+                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                value={currentSession ? currentSession.id : ""}
+              >
+                {sessions.length === 0 && (
+                  <option value="">Select a Session</option>
+                )}
+                {sessions.map(session => (
+                  <option key={session.id} value={session.id}>{session.name}</option>
+                ))}
+              </select>
+              {currentSession && (
+                <button
+                  onClick={deleteSession}
+                  className="bg-red-500 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
+                >
+                  Delete Session
+                </button>
+              )}
+            </div>
+            {deletedSessions.length > 0 && (
+              <div id="trash-bin" className="bg-gray-50 p-3 rounded-lg shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-base font-semibold text-gray-800">Trash Bin</h2>
+                  <button
+                    onClick={clearTrashBin}
+                    className="bg-red-600 text-white px-2 py-1 rounded shadow-md hover:bg-red-600 hover:shadow-lg transition-all duration-300 text-xs"
+                  >
+                    Clear Trash Bin
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Session Name</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deletedSessions.map(session => (
+                        <tr key={session.id} className="hover:bg-gray-50">
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{session.name}</td>
+                          <td className="border-b border-gray-200 p-1 flex gap-1">
+                            <button
+                              onClick={() => restoreSession(session.id)}
+                              className="bg-green-600 text-white px-1 py-1 rounded shadow-sm hover:bg-green-700 hover:shadow-md transition-all duration-300 text-xs"
+                            >
+                              Restore
+                            </button>
+                            <button
+                              onClick={() => permanentlyDeleteSession(session.id)}
+                              className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                            >
+                              Permanently Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal }) {
+      const [isOpen, setIsOpen] = useState(false);
+
+      const navItems = [
+        { name: "Home", section: "dashboard" },
+        { name: "Sessions", action: openSessionsModal },
+        { name: "Logout", action: handleLogout },
+      ];
+
+      return (
+        <nav className="bg-blue-600 text-white fixed top-0 left-0 w-full z-40 shadow-md">
+          <div className="max-w-5xl mx-auto px-2">
+            <div className="flex justify-between items-center h-10">
+              <div className="flex-shrink-0">
+                <h1 className="text-base font-bold">Payment Tracker</h1>
+              </div>
+              <div className="hidden sm:flex sm:space-x-1">
+                {isAuthenticated && navItems.map((item) => (
+                  item.action ? (
+                    <button
+                      key={item.name}
+                      onClick={item.action}
+                      className="px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      {item.name}
+                    </button>
+                  ) : (
+                    <button
+                      key={item.name}
+                      onClick={() => scrollToSection(item.section)}
+                      className="px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      {item.name}
+                    </button>
+                  )
+                ))}
+              </div>
+              <div className="sm:hidden">
+                <button
+                  onClick={() => setIsOpen(!isOpen)}
+                  className="text-white hover:bg-blue-700 p-1 rounded focus:outline-none"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d={isOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16m-7 6h7"}
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {isOpen && (
+              <div className="sm:hidden">
+                <div className="px-2 pt-1 pb-2 space-y-1">
+                  {isAuthenticated && navItems.map((item) => (
+                    item.action ? (
+                      <button
+                        key={item.name}
+                        onClick={() => { item.action(); setIsOpen(false); }}
+                        className="block px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 w-full text-left"
+                      >
+                        {item.name}
+                      </button>
+                    ) : (
+                      <button
+                        key={item.name}
+                        onClick={() => { scrollToSection(item.section); setIsOpen(false); }}
+                        className="block px-1 py-1 rounded text-xs font-medium hover:bg-blue-700 w-full text-left"
+                      >
+                        {item.name}
+                      </button>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </nav>
+      );
+    }
 
     function App() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -157,58 +509,489 @@
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [selectedImage, setSelectedImage] = useState(null);
       const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
-      const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
-      const [pdfDataUrl, setPdfDataUrl] = useState("");
-      const [orientation, setOrientation] = useState("portrait");
-      const [zoom, setZoom] = useState(1.0);
-      const [validateReceiptDate, setValidateReceiptDate] = useState(false);
-      const [requiredReceiptDate, setRequiredReceiptDate] = useState("");
+      const [restrictDate, setRestrictDate] = useState(false);
+      const [minDate, setMinDate] = useState("");
 
-      // Date formatting helper
-      const formatDateToDDMMYYYY = (dateInput) => {
-        if (!dateInput) return 'Invalid Date';
-        const date = new Date(dateInput); // Ensure it's a Date object
-        if (isNaN(date.getTime())) return 'Invalid Date';
-        
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
+      const openModal = (imageSrc) => {
+        setSelectedImage(imageSrc);
+        setIsModalOpen(true);
       };
 
-      const openModal = (imageSrc) => { setSelectedImage(imageSrc); setIsModalOpen(true); };
-      const closeModal = () => { setIsModalOpen(false); setSelectedImage(null); };
-      const openSessionsModal = () => setIsSessionsModalOpen(true);
-      const closeSessionsModal = () => { if (sessions.length === 0 && !currentSession) return; setIsSessionsModalOpen(false); };
-      const loadData = async () => { /* ... (keep existing function as is) ... */ };
-      const scrollToSection = (sectionId) => { /* ... (keep existing function as is) ... */ };
-      useEffect(() => { /* ... (keep existing effect as is) ... */ }, []);
-      const resetSessionTimeout = () => { /* ... (keep existing function as is) ... */ };
-      const handleLogin = async (e) => { /* ... (keep existing function as is) ... */ };
-      const handleLogout = async () => { /* ... (keep existing function as is) ... */ };
-      const createNewSession = async () => { /* ... (keep existing function as is) ... */ };
-      const openSession = async (sessionId) => { /* ... (keep existing function as is) ... */ };
-      const deleteSession = async () => { /* ... (keep existing function as is) ... */ };
-      const restoreSession = async (sessionId) => { /* ... (keep existing function as is) ... */ };
-      const permanentlyDeleteSession = async (sessionId) => { /* ... (keep existing function as is) ... */ };
-      const clearTrashBin = async () => { /* ... (keep existing function as is) ... */ };
-      const addPayer = async (e) => { /* ... (keep existing function as is) ... */ };
-      const processCSV = async (file) => { /* ... (keep existing function as is) ... */ };
-      const handleCSVUpload = async (files) => { /* ... (keep existing function as is) ... */ };
-      const handleCSVDragOver = (e) => { e.preventDefault(); setIsDraggingCSV(true); };
-      const handleCSVDragLeave = (e) => { e.preventDefault(); setIsDraggingCSV(false); };
-      const handleCSVDrop = (e) => { e.preventDefault(); setIsDraggingCSV(false); handleCSVUpload(e.dataTransfer.files); };
-      const editPayer = async (id, updatedPayer) => { /* ... (keep existing function as is) ... */ };
-      const deletePayer = async (id) => { /* ... (keep existing function as is) ... */ };
-      const validatePDFFile = async (file) => { /* ... (keep existing function as is) ... */ };
+      const closeModal = () => {
+        setIsModalOpen(false);
+        setSelectedImage(null);
+      };
 
-      const processPDFLogic = async (file, currentValidateDateFlag, currentRequiredDateValue) => {
+      const openSessionsModal = () => {
+        setIsSessionsModalOpen(true);
+      };
+
+      const closeSessionsModal = () => {
+        if (sessions.length === 0 && !currentSession) return; // Prevent closing if no session
+        setIsSessionsModalOpen(false);
+      };
+
+      const loadData = async () => {
+        const sessionsData = await db.paymentSessions.toArray();
+        setSessions(sessionsData);
+        const deletedSessionsData = await db.deletedSessions.toArray();
+        setDeletedSessions(deletedSessionsData);
+        if (sessionsData.length > 0) {
+          const lastSession = sessionsData[sessionsData.length - 1];
+          setCurrentSession(lastSession);
+          const payersData = await db.payers.where("sessionId").equals(lastSession.id).toArray();
+          const invalidData = await db.invalidReceipts.where("sessionId").equals(lastSession.id).toArray();
+          setPayers(payersData.map(p => ({
+            ...p,
+            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: p.pdfFilename || null,
+            transactionDate: p.transactionDate || null
+          })));
+          setInvalidReceipts(invalidData);
+        } else {
+          setIsSessionsModalOpen(true); // Open modal if no sessions exist
+        }
+      };
+
+      const scrollToSection = (sectionId) => {
+        const element = document.getElementById(sectionId);
+        if (element) {
+          const navHeight = 40;
+          const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({
+            top: elementPosition - navHeight,
+            behavior: "smooth"
+          });
+        }
+      };
+
+      useEffect(() => {
+        const checkSession = async () => {
+          const session = await db.settings.get("session");
+          if (session && session.value > Date.now()) {
+            setIsAuthenticated(true);
+            await loadData();
+            resetSessionTimeout();
+          } else {
+            setIsAuthenticated(false);
+          }
+        };
+        checkSession();
+        return () => clearTimeout(sessionTimeout);
+      }, []);
+
+      const resetSessionTimeout = () => {
+        clearTimeout(sessionTimeout);
+        const timeout = setTimeout(async () => {
+          setIsAuthenticated(false);
+          await db.settings.delete("session");
+          setError("Session timed out. Please log in again.");
+          setPayers([]);
+          setInvalidReceipts([]);
+          setSessions([]);
+          setDeletedSessions([]);
+          setCurrentSession(null);
+          setIsSessionsModalOpen(true); // Reopen modal on timeout
+        }, 30 * 60 * 1000);
+        setSessionTimeout(timeout);
+      };
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setError("");
+        const storedKey = await db.settings.get("passwordKey");
+        const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 150000 }).toString();
+        if (!storedKey) {
+          await db.settings.put({ key: "passwordKey", value: derivedKey });
+          await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
+          setIsAuthenticated(true);
+          await loadData();
+          resetSessionTimeout();
+          setPassword("");
+        } else if (storedKey.value === derivedKey) {
+          await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
+          setIsAuthenticated(true);
+          await loadData();
+          resetSessionTimeout();
+          setPassword("");
+        } else {
+          setError("Incorrect password");
+        }
+      };
+
+      const handleLogout = async () => {
+        await db.settings.delete("session");
+        clearTimeout(sessionTimeout);
+        setIsAuthenticated(false);
+        setError("");
+        setPdfError("");
+        setPayers([]);
+        setInvalidReceipts([]);
+        setSessions([]);
+        setDeletedSessions([]);
+        setCurrentSession(null);
+        setIsSessionsModalOpen(true); // Reopen modal on logout
+      };
+
+      const createNewSession = async () => {
+        if (!newSessionName.trim()) {
+          setError("Please enter a session name");
+          return;
+        }
+        const sessionNameLower = newSessionName.trim().toLowerCase();
+        const existingSession = sessions.find(s => s.name.toLowerCase() === sessionNameLower);
+        if (existingSession) {
+          setError("A session with this name already exists. Please choose a different name.");
+          return;
+        }
+        setIsLoading(true);
+        setError("");
+        setTimeout(async () => {
+          const session = { name: newSessionName.trim() };
+          const sessionId = await db.paymentSessions.add(session);
+          const newSession = { ...session, id: sessionId };
+          setSessions(prev => [...prev, newSession]);
+          setCurrentSession(newSession);
+          setPayers([]);
+          setInvalidReceipts([]);
+          setNewSessionName("");
+          setIsSessionsModalOpen(false); // Close modal after successful creation
+          setIsLoading(false);
+        }, 500);
+      };
+
+      const openSession = async (sessionId) => {
+        if (!sessionId) {
+          setCurrentSession(null);
+          setPayers([]);
+          setInvalidReceipts([]);
+          setError("");
+          setPdfError("");
+          setIsLoading(false);
+          return;
+        }
+        const session = sessions.find(s => s.id === parseInt(sessionId));
+        if (!session) {
+          setError("Session not found");
+          return;
+        }
+        setIsLoading(true);
+        setTimeout(async () => {
+          setCurrentSession(session);
+          const payersData = await db.payers.where("sessionId").equals(session.id).toArray();
+          const invalidData = await db.invalidReceipts.where("sessionId").equals(session.id).toArray();
+          setPayers(payersData.map(p => ({
+            ...p,
+            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: p.pdfFilename || null,
+            transactionDate: p.transactionDate || null
+          })));
+          setInvalidReceipts(invalidData);
+          setError("");
+          setPdfError("");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      const deleteSession = async () => {
+        if (!currentSession) {
+          setError("No session selected to delete");
+          return;
+        }
+        setIsLoading(true);
+        setTimeout(async () => {
+          const sessionId = currentSession.id;
+          const sessionPayers = await db.payers.where("sessionId").equals(sessionId).toArray();
+          const sessionInvalidReceipts = await db.invalidReceipts.where("sessionId").equals(sessionId).toArray();
+          await db.deletedSessions.add({
+            id: sessionId,
+            name: currentSession.name,
+            payers: sessionPayers,
+            invalidReceipts: sessionInvalidReceipts
+          });
+          await db.paymentSessions.delete(sessionId);
+          await db.payers.where("sessionId").equals(sessionId).delete();
+          await db.invalidReceipts.where("sessionId").equals(sessionId).delete();
+          setDeletedSessions(prev => [...prev, {
+            id: sessionId,
+            name: currentSession.name,
+            payers: sessionPayers,
+            invalidReceipts: sessionInvalidReceipts
+          }]);
+          
+          const updatedSessions = sessions.filter(s => s.id !== sessionId);
+          setSessions(updatedSessions);
+          
+          let nextSession = null;
+          if (updatedSessions.length > 0) {
+            nextSession = updatedSessions[updatedSessions.length - 1];
+            const beliBukuAgama = updatedSessions.find(s => s.name.toLowerCase() === "beli buku agama");
+            if (beliBukuAgama) {
+              nextSession = beliBukuAgama;
+            }
+          }
+          
+          setCurrentSession(null);
+          setPayers([]);
+          setInvalidReceipts([]);
+          
+          if (nextSession) {
+            await openSession(nextSession.id);
+          } else {
+            setIsSessionsModalOpen(true); // Reopen modal if no sessions remain
+          }
+          
+          setError("Session moved to Trash Bin");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      const restoreSession = async (sessionId) => {
+        setIsLoading(true);
+        setTimeout(async () => {
+          const deletedSession = deletedSessions.find(s => s.id === sessionId);
+          if (!deletedSession) {
+            setError("Session not found in Trash Bin");
+            setIsLoading(false);
+            return;
+          }
+          await db.paymentSessions.add({ id: sessionId, name: deletedSession.name });
+          const payersToRestore = deletedSession.payers.map(p => ({ ...p, sessionId }));
+          const invalidReceiptsToRestore = deletedSession.invalidReceipts.map(r => ({ ...r, sessionId }));
+          if (payersToRestore.length > 0) {
+            await db.payers.bulkAdd(payersToRestore);
+          }
+          if (invalidReceiptsToRestore.length > 0) {
+            await db.invalidReceipts.bulkAdd(invalidReceiptsToRestore);
+          }
+          await db.deletedSessions.delete(sessionId);
+          setSessions(prev => [...prev, { id: sessionId, name: deletedSession.name }]);
+          setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
+          setCurrentSession({ id: sessionId, name: deletedSession.name });
+          setPayers(payersToRestore.map(p => ({
+            ...p,
+            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
+            pdfFilename: p.pdfFilename || null,
+            transactionDate: p.transactionDate || null
+          })));
+          setInvalidReceipts(invalidReceiptsToRestore);
+          setError("Session restored successfully");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      const permanentlyDeleteSession = async (sessionId) => {
+        setIsLoading(true);
+        setTimeout(async () => {
+          await db.deletedSessions.delete(sessionId);
+          setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
+          setError("Session permanently deleted");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      const clearTrashBin = async () => {
+        setIsLoading(true);
+        setTimeout(async () => {
+          await db.deletedSessions.clear();
+          setDeletedSessions([]);
+          setError("Trash Bin cleared");
+          setIsLoading(false);
+        }, 500);
+      };
+
+      const addPayer = async (e) => {
+        e.preventDefault();
         if (!currentSession) {
           setError("Please create or select a session first");
           return;
         }
-        console.log(`[processPDFLogic ENTRY] File: ${file.name}, Validate Flag: ${currentValidateDateFlag}, Required Date: ${currentRequiredDateValue}`);
+        const { name, expectedAmount } = newPayer;
+        if (!name.trim() || isNaN(expectedAmount) || expectedAmount <= 0) {
+          setError("Invalid name or amount");
+          return;
+        }
+        const payer = {
+          name: name.trim(),
+          expectedAmount: parseFloat(expectedAmount).toFixed(2),
+          paidAmount: null,
+          transactionDate: null,
+          status: "No File Matched",
+          pdfFilename: null,
+          sessionId: currentSession.id
+        };
+        const id = await db.payers.add(payer);
+        setPayers(prev => [...prev, { ...payer, id }]);
+        setNewPayer({ name: "", expectedAmount: "" });
+      };
 
+      const processCSV = async (file) => {
+        console.log(`Processing CSV: ${file.name}`);
+        try {
+          const text = await file.text();
+          Papa.parse(text, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (result) => {
+              const data = result.data;
+              const errors = [];
+              const validPayers = [];
+              const headers = result.meta.fields.map(h => 
+                h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase()
+              );
+              console.log(`Parsed headers: ${JSON.stringify(headers)}`);
+              const requiredHeaders = ["name", "expected amount"];
+              const nameHeader = headers.find(h => h === "name");
+              const amountHeader = headers.find(h => h === "expected amount");
+              if (!nameHeader || !amountHeader) {
+                setError("CSV must have 'Name' and 'Expected Amount' columns (case-insensitive)");
+                return;
+              }
+              const originalNameHeader = result.meta.fields[headers.indexOf("name")];
+              const originalAmountHeader = result.meta.fields[headers.indexOf("expected amount")];
+              for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                const name = row[originalNameHeader]?.trim();
+                const expectedAmount = parseFloat(row[originalAmountHeader]);
+                if (!name || isNaN(expectedAmount) || expectedAmount <= 0) {
+                  errors.push(`Row ${i + 2}: Invalid name or amount`);
+                  continue;
+                }
+                validPayers.push({
+                  name,
+                  expectedAmount: expectedAmount.toFixed(2),
+                  paidAmount: null,
+                  transactionDate: null,
+                  status: "No File Matched",
+                  pdfFilename: null,
+                  sessionId: currentSession.id
+                });
+              }
+              if (validPayers.length > 0) {
+                const ids = await db.payers.bulkAdd(validPayers, { allKeys: true });
+                const newPayers = validPayers.map((payer, index) => ({
+                  ...payer,
+                  id: ids[index]
+                }));
+                setPayers(prev => [...prev, ...newPayers]);
+                console.log(`Added ${newPayers.length} payers from CSV`);
+              }
+              if (errors.length > 0) {
+                setError(`Added ${validPayers.length} payers. Errors: ${errors.join("; ")}`);
+              } else {
+                setError(`Successfully added ${validPayers.length} payers`);
+              }
+            },
+            error: (err) => {
+              console.error(`Error parsing CSV ${file.name}:`, err);
+              setError(`Failed to parse CSV: ${err.message}`);
+            }
+          });
+        } catch (err) {
+          console.error(`Error processing CSV ${file.name}:`, err);
+          setError(`Failed to process CSV: ${err.message}`);
+        }
+      };
+
+      const handleCSVUpload = async (files) => {
+        if (!currentSession) {
+          setError("Please create or select a session first");
+          return;
+        }
+        const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".csv"));
+        if (csvFiles.length === 0) {
+          setError("Please upload a valid CSV file");
+          return;
+        }
+        setError("");
+        for (const file of csvFiles) {
+          await processCSV(file);
+        }
+      };
+
+      const handleCSVDragOver = (e) => {
+        e.preventDefault();
+        setIsDraggingCSV(true);
+      };
+
+      const handleCSVDragLeave = (e) => {
+        e.preventDefault();
+        setIsDraggingCSV(false);
+      };
+
+      const handleCSVDrop = (e) => {
+        e.preventDefault();
+        setIsDraggingCSV(false);
+        const files = e.dataTransfer.files;
+        handleCSVUpload(files);
+      };
+
+      const editPayer = async (id, updatedPayer) => {
+        if (!updatedPayer.name.trim() || isNaN(updatedPayer.expectedAmount) || updatedPayer.expectedAmount <= 0) {
+          setError("Invalid name or amount");
+          return;
+        }
+        updatedPayer.expectedAmount = parseFloat(updatedPayer.expectedAmount).toFixed(2);
+        await db.payers.update(id, updatedPayer);
+        setPayers(prev => prev.map(p => (p.id === id ? { ...p, ...updatedPayer } : p)));
+      };
+
+      const deletePayer = async (id) => {
+        await db.payers.delete(id);
+        setPayers(prev => prev.filter(p => p.id !== id));
+      };
+
+      const validatePDFFile = async (file) => {
+        try {
+          const arrayBuffer = await file.slice(0, 5).arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const magicNumber = String.fromCharCode(...uint8Array);
+          return magicNumber === "%PDF-";
+        } catch (err) {
+          console.error(`Error validating PDF ${file.name}:`, err);
+          return false;
+        }
+      };
+
+      const parseDate = (dateStr) => {
+        if (!dateStr) return null;
+        // Handle formats: DD MMM YYYY HH:MM:SS, DD/MM/YYYY, YYYY/MM/DD
+        const regex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/i;
+        const match = dateStr.match(regex);
+        if (!match) return null;
+        let date;
+        if (match[0].includes(" ")) {
+          // Format: DD MMM YYYY or DD MMM YYYY HH:MM:SS
+          date = new Date(match[0].split(" ").slice(0, 3).join(" "));
+        } else {
+          // Format: DD/MM/YYYY or YYYY/MM/DD
+          const parts = match[0].split(/[/-]/);
+          if (parts[0].length === 4) {
+            // YYYY/MM/DD
+            date = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`);
+          } else {
+            // DD/MM/YYYY
+            date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          }
+        }
+        return isNaN(date.getTime()) ? null : date;
+      };
+
+      const formatDateToDDMMYYYY = (date) => {
+        if (!date) return "";
+        const d = new Date(date);
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+
+      const processPDF = async (file) => {
+        if (!currentSession) {
+          setError("Please create or select a session first");
+          return;
+        }
+        console.log(`Processing PDF: ${file.name}`);
         let text = "";
         let pngData = null;
         try {
@@ -223,228 +1006,515 @@
             const content = await page.getTextContent();
             text += content.items.map(item => item.str).join(" ") + " ";
           }
-          
-          if (currentValidateDateFlag && currentRequiredDateValue) {
-            const dateRegexForValidation = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
-            const pdfDateMatch = text.match(dateRegexForValidation);
-
-            if (pdfDateMatch && pdfDateMatch[0]) {
-              let pdfDateString = pdfDateMatch[0];
-              pdfDateString = pdfDateString.replace(/\s+\d{2}:\d{2}:\d{2}$/, '').trim();
-              
-              let pdfDate = new Date(pdfDateString);
-
-              if (isNaN(pdfDate.getTime()) || pdfDate.getFullYear() < 1970 || pdfDate.getFullYear() > 2100) {
-                  const parts = pdfDateString.replace(/[\/\s]+/g, '-').split('-');
-                  if (parts.length === 3) {
-                      const p1 = parseInt(parts[0]); const p2 = parseInt(parts[1]); const p3 = parseInt(parts[2]);
-                      if (p3 > 1000) { 
-                          if (p1 <= 31 && p2 <= 12) pdfDate = new Date(p3, p2 - 1, p1); 
-                          else if (p2 <= 31 && p1 <= 12) pdfDate = new Date(p3, p1 - 1, p2);
-                      } else if (p1 > 1000) {
-                          if (p2 <= 12 && p3 <= 31) pdfDate = new Date(p1, p2-1, p3); 
-                          else if (p3 <= 12 && p2 <=31) pdfDate = new Date(p1, p3-1, p2);
-                      }
-                      else if (p3 >=0 && p3 <=99 && p1 <=31 && p2 <=12) pdfDate = new Date(p3+2000, p2-1, p1); 
-                      else if (p3 >=0 && p3 <=99 && p2 <=31 && p1 <=12) pdfDate = new Date(p3+2000, p1-1, p2); 
-                  } else { 
-                    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                    let potentialDateStr = pdfDateString;
-                    monthNames.forEach((monthName, index) => {
-                        potentialDateStr = potentialDateStr.replace(new RegExp(monthName, 'i'), (index + 1).toString());
-                    });
-                    pdfDate = new Date(potentialDateStr.replace(/\s+/g, '-'));
-                  }
-              }
-              
-              const requiredDateFromInput = new Date(currentRequiredDateValue); 
-
-              if (isNaN(pdfDate.getTime())) {
-                const reason = `Could not parse a valid date from PDF string: "${pdfDateMatch[0]}"`;
-                pngData = await convertPDFToPNG(file);
-                const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
-                setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
-                setPdfError(`Failed to process ${file.name}: ${reason}.`);
-                return;
-              }
-              
-              pdfDate.setHours(0, 0, 0, 0);
-              requiredDateFromInput.setHours(0, 0, 0, 0);
-
-              if (pdfDate < requiredDateFromInput) {
-                // Use the new formatting function here:
-                const reason = `Date in PDF (${formatDateToDDMMYYYY(pdfDate)}) is older than required date (${formatDateToDDMMYYYY(requiredDateFromInput)})`;
-                
-                pngData = await convertPDFToPNG(file);
-                const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
-                setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
-                setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
-                return; 
-              }
-            } else {
-              const reason = `Required date validation is active, but no date was found in the PDF.`;
-              pngData = await convertPDFToPNG(file);
-              const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
-              setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
-              setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
-              return; 
-            }
-          }
-
+          console.log(`Extracted text from ${file.name}: ${text.slice(0, 100)}...`);
           const nameRegex = payers.map(p => new RegExp(`\\b${p.name}\\b`, "i"));
           const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
-          const transactionDateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
+          const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
           const extractedText = text.toLowerCase();
           let matchedName = null;
           for (const regex of nameRegex) {
             const match = text.match(regex);
-            if (match) { matchedName = payers.find(p => regex.test(p.name))?.name; break; }
+            if (match) {
+              matchedName = payers.find(p => regex.test(p.name))?.name;
+              break;
+            }
           }
           const amountMatch = text.match(amountRegex);
           const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
           let transactionDate = null;
-          const dateMatchForDisplay = text.match(transactionDateRegex); 
-          if (dateMatchForDisplay) transactionDate = dateMatchForDisplay[0];
-          
-          let matchedPayer = null;
-          if (matchedName) matchedPayer = payers.find(p => p.name.toLowerCase() === matchedName.toLowerCase());
-          else {
-            const filename = file.name.replace(".pdf", "");
-            matchedPayer = BM25.match(filename, payers.filter(p => p.status === "No File Matched" || p.status === "Unpaid")); 
+          const dateMatch = text.match(dateRegex);
+          if (dateMatch) {
+            transactionDate = dateMatch[0];
+            console.log(`Extracted transaction date from ${file.name}: ${transactionDate}`);
           }
-
+          console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}, Date=${transactionDate}`);
+          let matchedPayer = null;
+          if (matchedName) {
+            matchedPayer = payers.find(p => p.name.toLowerCase() === matchedName.toLowerCase());
+            console.log(`Matched by name: ${matchedPayer ? matchedPayer.name : 'None'}`);
+          } else {
+            const filename = file.name.replace(".pdf", "");
+            matchedPayer = BM25.match(filename, payers);
+            console.log(`BM25 match for ${filename}: ${matchedPayer ? matchedPayer.name : 'None'}`);
+          }
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
-          if (existingReceipt) { await db.invalidReceipts.delete(existingReceipt.id); setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id)); }
-          
-          const payerWithPDF = payers.find(p => p.pdfFilename === file.name && p.sessionId === currentSession.id);
-          if (payerWithPDF) { setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`); return; }
-
+          if (existingReceipt) {
+            console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
+            await db.invalidReceipts.delete(existingReceipt.id);
+            setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
+          }
+          const payerWithPDF = payers.find(p => p.pdfFilename === file.name);
+          if (payerWithPDF) {
+            console.log(`PDF ${file.name} is already associated with payer ${payerWithPDF.name}. Skipping.`);
+            setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`);
+            return;
+          }
+          // Date validation
+          if (restrictDate && minDate) {
+            const pdfDate = parseDate(transactionDate);
+            const userMinDate = new Date(minDate);
+            if (!pdfDate) {
+              console.log(`Generating PNG for invalid receipt: ${file.name}`);
+              pngData = await convertPDFToPNG(file);
+              const reason = "No valid date found in PDF";
+              console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
+              const id = await db.invalidReceipts.add({ 
+                filename: file.name, 
+                reason, 
+                data: text || "Unable to extract text",
+                pngData,
+                sessionId: currentSession.id 
+              });
+              setInvalidReceipts(prev => [...prev, { 
+                id, 
+                filename: file.name, 
+                reason, 
+                data: text || "Unable to extract text",
+                pngData,
+                sessionId: currentSession.id 
+              }]);
+              setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
+              return;
+            }
+            if (pdfDate < userMinDate) {
+              console.log(`Generating PNG for invalid receipt: ${file.name}`);
+              pngData = await convertPDFToPNG(file);
+              const reason = `PDF date is earlier than ${formatDateToDDMMYYYY(userMinDate)}`;
+              console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
+              const id = await db.invalidReceipts.add({ 
+                filename: file.name, 
+                reason, 
+                data: text || "Unable to extract text",
+                pngData,
+                sessionId: currentSession.id 
+              });
+              setInvalidReceipts(prev => [...prev, { 
+                id, 
+                filename: file.name, 
+                reason, 
+                data: text || "Unable to extract text",
+                pngData,
+                sessionId: currentSession.id 
+              }]);
+              setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
+              return;
+            }
+          }
           if (!matchedPayer || !extractedAmount) {
             let reason = "No payer matched";
-            if (matchedPayer && !extractedAmount) reason = "No amount found in PDF";
+            if (matchedPayer && !extractedAmount) {
+              reason = "No amount found in PDF";
+            }
+            console.log(`Generating PNG for invalid receipt: ${file.name}`);
             pngData = await convertPDFToPNG(file);
-            const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
-            setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
+            console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
+            const id = await db.invalidReceipts.add({ 
+              filename: file.name, 
+              reason, 
+              data: text || "Unable to extract text",
+              pngData,
+              sessionId: currentSession.id 
+            });
+            setInvalidReceipts(prev => [...prev, { 
+              id, 
+              filename: file.name, 
+              reason, 
+              data: text || "Unable to extract text",
+              pngData,
+              sessionId: currentSession.id 
+            }]);
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
           const status = extractedAmount.toFixed(2) === matchedPayer.expectedAmount ? "Paid" : "Incorrect";
-          await db.payers.update(matchedPayer.id, { paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name });
-          setPayers(prev => prev.map(p => p.id === matchedPayer.id ? { ...p, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : p));
+          console.log(`Updating payer ${matchedPayer.name}: Status=${status}, Amount=${extractedAmount}, Date=${transactionDate}, PDF=${file.name}`);
+          await db.payers.update(matchedPayer.id, { 
+            paidAmount: extractedAmount.toFixed(2), 
+            transactionDate: transactionDate,
+            status, 
+            pdfFilename: file.name 
+          });
+          setPayers(prev => prev.map(p => 
+            p.id === matchedPayer.id ? { ...p, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : p
+          ));
         } catch (err) {
           console.error(`Error processing ${file.name}:`, err);
-          let userFriendlyMessage = "The file may be corrupted or not a valid PDF.";
-          if (err.message.includes("Invalid PDF format")) userFriendlyMessage = "The file is not a valid PDF.";
-          else if (err.message.includes("doc is not defined")) userFriendlyMessage = "The file could not be read as a PDF.";
-          else if (err.message.includes("Invalid PDF structure")) userFriendlyMessage = "The PDF structure is invalid.";
+          let userFriendlyMessage = "The file may be corrupted or not a valid PDF. Please upload a different file.";
+          if (err.message.includes("Invalid PDF format")) {
+            userFriendlyMessage = "The file is not a valid PDF. Please upload a different file.";
+          } else if (err.message.includes("doc is not defined")) {
+            userFriendlyMessage = "The file could not be read as a PDF. It may be corrupted or in an unsupported format.";
+          } else if (err.message.includes("Invalid PDF structure")) {
+            userFriendlyMessage = "The PDF structure is invalid. Please upload a different file.";
+          }
           const reason = `Failed to process: ${userFriendlyMessage}`;
-          pngData = await convertPDFToPNG(file); // Ensure pngData is available
+          console.log(`Generating PNG for invalid receipt: ${file.name}`);
+          pngData = await convertPDFToPNG(file);
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
-          if (existingReceipt) { await db.invalidReceipts.delete(existingReceipt.id); setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));}
-          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
-          setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
+          if (existingReceipt) {
+            console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
+            await db.invalidReceipts.delete(existingReceipt.id);
+            setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
+          }
+          console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
+          const id = await db.invalidReceipts.add({ 
+            filename: file.name, 
+            reason, 
+            data: text || "Unable to extract text",
+            pngData,
+            sessionId: currentSession.id 
+          });
+          setInvalidReceipts(prev => [...prev, { 
+            id, 
+            filename: file.name, 
+            reason, 
+            data: text || "Unable to extract text",
+            pngData,
+            sessionId: currentSession.id 
+          }]);
           setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
         }
       };
 
       const handleFileUpload = async (files) => {
-        console.log(`[handleFileUpload ENTRY] Validate Checkbox: ${validateReceiptDate}, Required Date: ${requiredReceiptDate}`);
         const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf" || f.name.endsWith(".pdf"));
-        if (pdfFiles.length === 0) { setPdfError("Please upload files with a .pdf extension"); return; }
+        if (pdfFiles.length === 0) {
+          setPdfError("Please upload files with a .pdf extension");
+          return;
+        }
         setPdfError("");
         for (const file of pdfFiles) {
-          await processPDFLogic(file, validateReceiptDate, requiredReceiptDate);
+          await processPDF(file);
         }
       };
 
-      const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-      const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
-      const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); handleFileUpload(e.dataTransfer.files); };
-      const assignReceipt = async (receiptId, payerId, amount) => { /* ... (keep existing function as is, but ensure formatDateToDDMMYYYY is used if displaying dates from receipt.data ) ... */ };
-      const deletePayment = async (id) => { /* ... (keep existing function as is) ... */ };
-      const deleteInvalidReceipt = async (id) => { /* ... (keep existing function as is) ... */ };
-      const exportToCSV = () => { /* ... (keep existing function as is) ... */ };
-      const generatePDF = () => { /* ... (keep existing function as is) ... */ };
-      const exportToPDF = () => { /* ... (keep existing function as is) ... */ };
-      const handlePrint = () => { /* ... (keep existing function as is) ... */ };
-      const filteredPayers = payers.filter(p => filter === "All" || p.status === filter)
-        .sort((a, b) => {
-          if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-          if (sortBy === "name-desc") return b.name.localeCompare(a.name);
-          if (sortBy === "status-asc") return a.status.localeCompare(b.status);
-          if (sortBy === "status-desc") return b.status.localeCompare(a.status);
-          return 0;
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      };
+
+      const handleDragLeave = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const files = e.dataTransfer.files;
+        handleFileUpload(files);
+      };
+
+      const assignReceipt = async (receiptId, payerId, amount) => {
+        if (!payerId || isNaN(amount) || amount <= 0) {
+          setError("Invalid payer or amount");
+          return;
+        }
+        const payer = payers.find(p => p.id === parseInt(payerId));
+        const receipt = invalidReceipts.find(r => r.id === receiptId);
+        const status = parseFloat(amount).toFixed(2) === payer.expectedAmount ? "Paid" : "Incorrect";
+        await db.payers.update(payer.id, { 
+          paidAmount: parseFloat(amount).toFixed(2), 
+          transactionDate: null,
+          status, 
+          pdfFilename: receipt.filename 
         });
+        await db.invalidReceipts.delete(receiptId);
+        setPayers(prev => prev.map(p => 
+          p.id === payer.id ? { ...p, paidAmount: parseFloat(amount).toFixed(2), transactionDate: null, status, pdfFilename: receipt.filename } : p
+        ));
+        setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
+        setPdfError("");
+      };
 
-      if (!isAuthenticated) { /* ... (keep existing JSX as is) ... */ }
+      const deletePayment = async (id) => {
+        await db.payers.update(id, { paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null });
+        setPayers(prev => prev.map(p => 
+          p.id === id ? { ...p, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : p
+        ));
+      };
 
-      return ( /* ... (keep existing JSX as is, no changes needed here for date formatting) ... */ 
+      const deleteInvalidReceipt = async (id) => {
+        await db.invalidReceipts.delete(id);
+        setInvalidReceipts(prev => prev.filter(r => r.id !== id));
+      };
+
+      const exportToCSV = () => {
+        const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
+        const rows = payers.map(p => [
+          p.name,
+          p.expectedAmount,
+          p.paidAmount || "",
+          p.transactionDate || "",
+          p.status,
+          p.pdfFilename || ""
+        ]);
+        const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `payment_tracker_${currentSession ? currentSession.name.replace(/\s+/g, "_") : "unnamed"}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const filteredPayers = payers.filter(p => 
+        filter === "All" || p.status === filter
+      ).sort((a, b) => {
+        if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+        if (sortBy === "name-desc") return b.name.localeCompare(b.name);
+        if (sortBy === "status-asc") return a.status.localeCompare(b.status);
+        if (sortBy === "status-desc") return b.status.localeCompare(b.status);
+      });
+
+      if (!isAuthenticated) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-2">
+            <div className="bg-white p-3 rounded-lg shadow-lg w-full max-w-xs transform transition-all hover:scale-105">
+              <h1 className="text-base font-bold text-gray-800 mb-2 text-center">Payment Tracker</h1>
+              {error && <p className="text-red-500 mb-1 text-center text-xs">{error}</p>}
+              <form onSubmit={handleLogin}>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full p-1 mb-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 text-white p-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+                >
+                  Login
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-2">
-          <NavBar isAuthenticated={isAuthenticated} currentSession={currentSession} handleLogout={handleLogout} scrollToSection={scrollToSection} openSessionsModal={openSessionsModal} />
+          <NavBar
+            isAuthenticated={isAuthenticated}
+            currentSession={currentSession}
+            handleLogout={handleLogout}
+            scrollToSection={scrollToSection}
+            openSessionsModal={openSessionsModal}
+          />
           <div className="max-w-5xl mx-auto">
-            {error && (<p className="text-red-500 bg-red-50 p-1 rounded mb-2 text-xs animate-pulse">{error}</p>)}
-            {isLoading && (<div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div></div>)}
+            {error && (
+              <p className="text-red-500 bg-red-50 p-1 rounded mb-2 text-xs animate-pulse">{error}</p>
+            )}
+            {isLoading && (
+              <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div>
+              </div>
+            )}
+
+            {/* Session Workspace Canvas */}
             <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
-              {currentSession && (<h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">{currentSession.name}</h3>)}
+              {currentSession && (
+                <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
+                  {currentSession.name}
+                </h3>
+              )}
+
+              {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
                 <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
-                  <input type="text" value={newPayer.name} onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })} placeholder="Payer Name" className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" required />
-                  <input type="number" value={newPayer.expectedAmount} onChange={(e) => setNewPayer({ ...newPayer, expectedAmount: e.target.value })} placeholder="Expected Amount (RM)" step="0.01" min="0" className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" required />
-                  <button type="submit" className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs">Add</button>
+                  <input
+                    type="text"
+                    value={newPayer.name}
+                    onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })}
+                    placeholder="Payer Name"
+                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                    required
+                  />
+                  <input
+                    type="number"
+                    value={newPayer.expectedAmount}
+                    onChange={(e) => setNewPayer({ ...newPayer, expectedAmount: e.target.value })}
+                    placeholder="Expected Amount (RM)"
+                    step="0.01"
+                    min="0"
+                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
+                  >
+                    Add
+                  </button>
                 </form>
-                <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'}`} onDragOver={handleCSVDragOver} onDragLeave={handleCSVDragLeave} onDrop={handleCSVDrop}>
+                <div
+                  className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
+                    isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                  onDragOver={handleCSVDragOver}
+                  onDragLeave={handleCSVDragLeave}
+                  onDrop={handleCSVDrop}
+                >
                   <p className="mb-1 text-gray-600 text-xs">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
-                  <input type="file" accept=".csv" onChange={(e) => handleCSVUpload(e.target.files)} className="hidden" id="csvInput" />
-                  <label htmlFor="csvInput" className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs">Select CSV File</label>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={(e) => handleCSVUpload(e.target.files)}
+                    className="hidden"
+                    id="csvInput"
+                  />
+                  <label
+                    htmlFor="csvInput"
+                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs"
+                  >
+                    Select CSV File
+                  </label>
                 </div>
               </div>
+
+              {/* PDF Upload with Drag-and-Drop */}
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
-                <div className="flex items-center mb-2 space-x-2">
-                  <input type="checkbox" id="validateDateCheckbox" checked={validateReceiptDate} onChange={(e) => setValidateReceiptDate(e.target.checked)} className="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
-                  <label htmlFor="validateDateCheckbox" className="text-xs text-gray-700">Validate: Receipt date must be on or after</label>
-                  <input type="date" value={requiredReceiptDate} onChange={(e) => setRequiredReceiptDate(e.target.value)} disabled={!validateReceiptDate} className={`p-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!validateReceiptDate ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={restrictDate}
+                    onChange={(e) => setRestrictDate(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label className="text-xs text-gray-700">Restrict by minimum date</label>
+                  <input
+                    type="date"
+                    value={minDate}
+                    onChange={(e) => setMinDate(e.target.value)}
+                    disabled={!restrictDate}
+                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                  />
                 </div>
-                <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+                <div
+                  className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
+                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                   <p className="mb-1 text-gray-600 text-xs">Drag and drop PDF files here or click to select</p>
-                  <input type="file" accept=".pdf" multiple onChange={(e) => handleFileUpload(e.target.files)} className="hidden" id="fileInput" />
-                  <label htmlFor="fileInput" className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs">Select Files</label>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    multiple
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                    className="hidden"
+                    id="fileInput"
+                  />
+                  <label
+                    htmlFor="fileInput"
+                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs"
+                  >
+                    Select Files
+                  </label>
                 </div>
               </div>
+
+              {/* Dashboard */}
               <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
                 <div className="flex flex-col sm:flex-row gap-1 mb-2">
-                  <select value={filter} onChange={(e) => setFilter(e.target.value)} className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs">
-                    <option value="All">All</option> <option value="Paid">Paid</option> <option value="Unpaid">Unpaid</option> <option value="Incorrect">Incorrect</option> <option value="No File Matched">No File Matched</option>
+                  <select
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                  >
+                    <option value="All">All</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Unpaid">Unpaid</option>
+                    <option value="Incorrect">Incorrect</option>
+                    <option value="No File Matched">No File Matched</option>
                   </select>
-                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs">
-                    <option value="name-asc">Name (A-Z)</option> <option value="name-desc">Name (Z-A)</option> <option value="status-asc">Status (A-Z)</option> <option value="status-desc">Status (Z-A)</option>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                  >
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="status-asc">Status (A-Z)</option>
+                    <option value="status-desc">Status (Z-A)</option>
                   </select>
-                  <button onClick={exportToCSV} className="bg-green-600 text-white px-2 py-1 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-xs">Export to CSV</button>
-                  <button onClick={exportToPDF} className="bg-purple-600 text-white px-2 py-1 rounded shadow-md hover:bg-purple-700 hover:shadow-lg transition-all duration-300 text-xs">Export to PDF</button>
+                  <button
+                    onClick={exportToCSV}
+                    className="bg-green-600 text-white px-2 py-1 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-xs"
+                  >
+                    Export to CSV
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Name</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Paid Amount</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Transaction Date</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Status</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">PDF File</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Name</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Paid Amount</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Transaction Date</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Status</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">PDF File</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPayers.map(payer => (
-                        <tr key={payer.id} className={payer.status === "Paid" ? "bg-green-50 hover:bg-green-100" : payer.status === "Incorrect" ? "bg-orange-50 hover:bg-orange-100" : "bg-white hover:bg-gray-50"}>
+                        <tr 
+                          key={payer.id} 
+                          className={
+                            payer.status === "Paid" 
+                              ? "bg-green-50 hover:bg-green-100" 
+                              : payer.status === "Incorrect" 
+                              ? "bg-orange-50 hover:bg-orange-100" 
+                              : "bg-white hover:bg-gray-50"
+                          }
+                        >
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.name}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
-                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate ? formatDateToDDMMYYYY(new Date(payer.transactionDate.replace(/(\d{2}:\d{2}:\d{2})$/, '').trim())) : "-"}</td>
+                          <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.transactionDate || "-"}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.status}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
                           <td className="border-b border-gray-200 p-1 flex flex-wrap gap-1">
-                            <button onClick={() => { const newName = prompt("Enter new name", payer.name); const newAmount = prompt("Enter new expected amount", payer.expectedAmount); if (newName !== null && newAmount !== null) { editPayer(payer.id, { name: newName, expectedAmount: newAmount }); } }} className="bg-yellow-500 text-white px-1 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs">Edit</button>
-                            <button onClick={() => deletePayer(payer.id)} className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs">Delete</button>
-                            {payer.paidAmount && (<button onClick={() => deletePayment(payer.id)} className="bg-gray-500 text-white px-1 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs">Clear Payment</button>)}
+                            <button
+                              onClick={() => {
+                                const newName = prompt("Enter new name", payer.name);
+                                const newAmount = prompt("Enter new expected amount", payer.expectedAmount);
+                                if (newName && newAmount) {
+                                  editPayer(payer.id, {
+                                    name: newName,
+                                    expectedAmount: newAmount
+                                  });
+                                }
+                              }}
+                              className="bg-yellow-500 text-white px-1 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deletePayer(payer.id)}
+                              className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                            >
+                              Delete
+                            </button>
+                            {payer.paidAmount && (
+                              <button
+                                onClick={() => deletePayment(payer.id)}
+                                className="bg-gray-500 text-white px-1 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs"
+                              >
+                                Clear Payment
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -452,6 +1522,8 @@
                   </table>
                 </div>
               </div>
+
+              {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
                 <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
                   <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
@@ -459,22 +1531,54 @@
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invalidReceipts.map(receipt => (
                           <tr key={receipt.id} className="hover:bg-gray-50">
                             <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.filename}</td>
-                            <td className="border-b border-gray-200 p-1 text-gray-700">{receipt.pngData ? (<img src={receipt.pngData} alt="PDF Preview" className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer" onClick={() => openModal(receipt.pngData)} />) : (<span className="text-gray-500 text-xs">No preview</span>)}</td>
+                            <td className="border-b border-gray-200 p-1 text-gray-700">
+                              {receipt.pngData ? (
+                                <img 
+                                  src={receipt.pngData} 
+                                  alt="PDF Preview" 
+                                  className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer"
+                                  onClick={() => openModal(receipt.pngData)}
+                                />
+                              ) : (
+                                <span className="text-gray-500 text-xs">No preview available</span>
+                              )}
+                            </td>
                             <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.reason}</td>
                             <td className="border-b border-gray-200 p-1 flex gap-1">
-                              <select className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" defaultValue="" onChange={(e) => { const selPayerId = e.target.value; if (selPayerId) { const amt = prompt(`Enter amount for ${payers.find(p=>p.id===parseInt(selPayerId))?.name || 'payer'}`); if (amt !== null) { assignReceipt(receipt.id, selPayerId, amt); } } e.target.value = ""; }}>
+                              <select
+                                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
+                                onChange={(e) => {
+                                  const amount = prompt("Enter amount");
+                                  if (amount) {
+                                    assignReceipt(receipt.id, e.target.value, amount);
+                                  }
+                                }}
+                              >
                                 <option value="">Select Payer</option>
-                                {payers.filter(p => !p.pdfFilename).map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                                {payers.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
                               </select>
                             </td>
-                            <td className="border-b border-gray-200 p-1"><button onClick={() => deleteInvalidReceipt(receipt.id)} className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs">Delete</button></td>
+                            <td className="border-b border-gray-200 p-1">
+                              <button
+                                onClick={() => deleteInvalidReceipt(receipt.id)}
+                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
+                              >
+                                Delete
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -483,14 +1587,41 @@
                 </div>
               )}
             </div>
-            <ImageModal isOpen={isModalOpen} onClose={closeModal} imageSrc={selectedImage} />
-            <SessionsModal isOpen={isSessionsModalOpen} onClose={closeSessionsModal} sessions={sessions} deletedSessions={deletedSessions} currentSession={currentSession} setSessions={setSessions} setDeletedSessions={setDeletedSessions} setCurrentSession={setCurrentSession} setPayers={setPayers} setInvalidReceipts={setInvalidReceipts} setError={setError} setIsLoading={setIsLoading} newSessionName={newSessionName} setNewSessionName={setNewSessionName} openSession={openSession} createNewSession={createNewSession} deleteSession={deleteSession} restoreSession={restoreSession} permanentlyDeleteSession={permanentlyDeleteSession} clearTrashBin={clearTrashBin} />
-            <PrintPreviewModal isOpen={isPrintPreviewOpen} onClose={() => { setIsPrintPreviewOpen(false); if (pdfDataUrl) URL.revokeObjectURL(pdfDataUrl); }} onPrint={handlePrint} pdfDataUrl={pdfDataUrl} setOrientation={setOrientation} setZoom={setZoom} />
+
+            <ImageModal 
+              isOpen={isModalOpen}
+              onClose={closeModal}
+              imageSrc={selectedImage}
+            />
+            <SessionsModal 
+              isOpen={isSessionsModalOpen}
+              onClose={closeSessionsModal}
+              sessions={sessions}
+              deletedSessions={deletedSessions}
+              currentSession={currentSession}
+              setSessions={setSessions}
+              setDeletedSessions={setDeletedSessions}
+              setCurrentSession={setCurrentSession}
+              setPayers={setPayers}
+              setInvalidReceipts={setInvalidReceipts}
+              setError={setError}
+              setIsLoading={setIsLoading}
+              newSessionName={newSessionName}
+              setNewSessionName={setNewSessionName}
+              openSession={openSession}
+              createNewSession={createNewSession}
+              deleteSession={deleteSession}
+              restoreSession={restoreSession}
+              permanentlyDeleteSession={permanentlyDeleteSession}
+              clearTrashBin={clearTrashBin}
+            />
           </div>
         </div>
       );
     }
+
     ReactDOM.render(<App />, document.getElementById("root"));
   </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93c7f0d9e9d3bff6',t:'MTc0NjY5NjY1MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 </html>
