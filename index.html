@@ -204,8 +204,8 @@
       }
     };
 
-    function ImageModal({ isOpen, onClose, imageSrc }) {
-      if (!isOpen || !imageSrc) return null;
+    function ImageModal({ Deportivo, onClose, imageSrc }) {
+      if (!Deportivo || !imageSrc) return null;
 
       return (
         <div 
@@ -594,7 +594,7 @@
           })));
           setInvalidReceipts(invalidData);
         } else {
-          setIsSessionsModalOpen(true); // Open modal if no sessions exist
+          setIsSessionsModalOpen(true);
         }
       };
 
@@ -642,7 +642,7 @@
           setSessions([]);
           setDeletedSessions([]);
           setCurrentSession(null);
-          setIsSessionsModalOpen(true); // Reopen modal on timeout
+          setIsSessionsModalOpen(true);
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
       };
@@ -653,7 +653,6 @@
         const storedKey = await db.settings.get("passwordKey");
         const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 150000 }).toString();
         if (!storedKey) {
-          // Setting new password
           if (!password) {
             setError("Please enter a password");
             return;
@@ -671,7 +670,6 @@
           setConfirmPassword("");
           setIsSettingNewPassword(false);
         } else if (storedKey.value === derivedKey) {
-          // Logging in with existing password
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
           await loadData();
@@ -694,7 +692,7 @@
         setSessions([]);
         setDeletedSessions([]);
         setCurrentSession(null);
-        setIsSessionsModalOpen(true); // Reopen modal on logout
+        setIsSessionsModalOpen(true);
       };
 
       const createNewSession = async () => {
@@ -719,7 +717,7 @@
           setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
-          setIsSessionsModalOpen(false); // Close modal after successful creation
+          setIsSessionsModalOpen(false);
           setIsLoading(false);
         }, 500);
       };
@@ -802,7 +800,7 @@
           if (nextSession) {
             await openSession(nextSession.id);
           } else {
-            setIsSessionsModalOpen(true); // Reopen modal if no sessions remain
+            setIsSessionsModalOpen(true);
           }
           
           setError("Session moved to Trash Bin");
@@ -1019,22 +1017,17 @@
 
       const parseDate = (dateStr) => {
         if (!dateStr) return null;
-        // Handle formats: DD MMM YYYY HH:MM:SS, DD/MM/YYYY, YYYY/MM/DD
         const regex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/i;
         const match = dateStr.match(regex);
         if (!match) return null;
         let date;
         if (match[0].includes(" ")) {
-          // Format: DD MMM YYYY or DD MMM YYYY HH:MM:SS
           date = new Date(match[0].split(" ").slice(0, 3).join(" "));
         } else {
-          // Format: DD/MM/YYYY or YYYY/MM/DD
           const parts = match[0].split(/[/-]/);
           if (parts[0].length === 4) {
-            // YYYY/MM/DD
             date = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`);
           } else {
-            // DD/MM/YYYY
             date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
           }
         }
@@ -1113,7 +1106,6 @@
             setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`);
             return;
           }
-          // Date validation
           if (restrictDate && minDate) {
             const pdfDate = parseDate(transactionDate);
             const userMinDate = new Date(minDate);
@@ -1186,7 +1178,7 @@
               data: text || "Unable to extract text",
               pngData,
               sessionId: currentSession.id 
-            }]);
+            });
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
@@ -1391,7 +1383,6 @@
               </div>
             )}
 
-            {/* Session Workspace Canvas */}
             <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
               {currentSession && (
                 <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
@@ -1399,7 +1390,6 @@
                 </h3>
               )}
 
-              {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
                 <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1453,7 +1443,6 @@
                 </div>
               </div>
 
-              {/* PDF Upload with Drag-and-Drop */}
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
@@ -1469,7 +1458,7 @@
                     type="date"
                     value={minDate}
                     onChange={(e) => setMinDate(e.target.value)}
-                    disabled={!resistDate}
+                    disabled={!restrictDate}
                     className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
                   />
                 </div>
@@ -1499,7 +1488,6 @@
                 </div>
               </div>
 
-              {/* Dashboard */}
               <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
                 <div className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1600,7 +1588,6 @@
                 </div>
               </div>
 
-              {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
                 <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
                   <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
@@ -1612,7 +1599,7 @@
                           <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
                           <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
                           <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                          <th className="border-b border-gray-200 p-1 text258-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
