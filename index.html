@@ -204,8 +204,8 @@
       }
     };
 
-    function ImageModal({ Deportivo, onClose, imageSrc }) {
-      if (!Deportivo || !imageSrc) return null;
+    function ImageModal({ isOpen, onClose, imageSrc }) {
+      if (!isOpen || !imageSrc) return null;
 
       return (
         <div 
@@ -342,82 +342,12 @@
       );
     }
 
-    function ChangePasswordModal({ isOpen, onClose, handleChangePassword, error }) {
-      const [originalPassword, setOriginalPassword] = useState("");
-      const [newPassword, setNewPassword] = useState("");
-      const [confirmNewPassword, setConfirmNewPassword] = useState("");
-
-      if (!isOpen) return null;
-
-      const handleSubmit = (e) => {
-        e.preventDefault();
-        handleChangePassword(originalPassword, newPassword, confirmNewPassword);
-        setOriginalPassword("");
-        setNewPassword("");
-        setConfirmNewPassword("");
-      };
-
-      return (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={onClose}
-        >
-          <div 
-            className="bg-white p-3 rounded-lg shadow-xl max-w-sm w-full relative"
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              onClick={onClose}
-              className="absolute top-1 right-1 text-gray-600 hover:text-gray-800 text-sm"
-            >
-              ×
-            </button>
-            <h2 className="text-base font-semibold text-gray-800 mb-2">Change Password</h2>
-            {error && <p className="text-red-500 mb-2 text-xs">{error}</p>}
-            <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-              <input
-                type="password"
-                value={originalPassword}
-                onChange={(e) => setOriginalPassword(e.target.value)}
-                placeholder="Original Password"
-                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                required
-              />
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New Password"
-                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                required
-              />
-              <input
-                type="password"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                placeholder="Confirm New Password"
-                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                required
-              />
-              <button
-                type="submit"
-                className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-              >
-                Change Password
-              </button>
-            </form>
-          </div>
-        </div>
-      );
-    }
-
-    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal, openChangePasswordModal }) {
+    function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal }) {
       const [isOpen, setIsOpen] = useState(false);
 
       const navItems = [
         { name: "Home", section: "dashboard" },
         { name: "Sessions", action: openSessionsModal },
-        { name: "Change Password", action: openChangePasswordModal },
         { name: "Logout", action: handleLogout },
       ];
 
@@ -521,13 +451,11 @@
       const [isLoading, setIsLoading] = useState(false);
       const [deletedSessions, setDeletedSessions] = useState([]);
       const [isModalOpen, setIsModalOpen] = useState(false);
+      const [selectedImage, setSelectedImage] = useState(null);
       const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
-      const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
-      const [changePasswordError, setChangePasswordError] = useState("");
       const [restrictDate, setRestrictDate] = useState(false);
       const [minDate, setMinDate] = useState("");
       const [isSettingNewPassword, setIsSettingNewPassword] = useState(false);
-      const [selectedImage, setSelectedImage] = useState(null);
 
       const openModal = (imageSrc) => {
         setSelectedImage(imageSrc);
@@ -544,36 +472,8 @@
       };
 
       const closeSessionsModal = () => {
-        if (sessions.length === 0 && !currentSession) return;
+        if (sessions.length === 0 && !currentSession) return; // Prevent closing if no session
         setIsSessionsModalOpen(false);
-      };
-
-      const openChangePasswordModal = () => {
-        setIsChangePasswordModalOpen(true);
-        setChangePasswordError("");
-      };
-
-      const closeChangePasswordModal = () => {
-        setIsChangePasswordModalOpen(false);
-        setChangePasswordError("");
-      };
-
-      const handleChangePassword = async (originalPassword, newPassword, confirmNewPassword) => {
-        setChangePasswordError("");
-        if (newPassword !== confirmNewPassword) {
-          setChangePasswordError("New passwords do not match");
-          return;
-        }
-        const storedKey = await db.settings.get("passwordKey");
-        const derivedKey = CryptoJS.PBKDF2(originalPassword, "salt", { keySize: 256/32, iterations: 150000 }).toString();
-        if (storedKey.value !== derivedKey) {
-          setChangePasswordError("Original password is incorrect");
-          return;
-        }
-        const newDerivedKey = CryptoJS.PBKDF2(newPassword, "salt", { keySize: 256/32, iterations: 150000 }).toString();
-        await db.settings.put({ key: "passwordKey", value: newDerivedKey });
-        setError("Password changed successfully");
-        closeChangePasswordModal();
       };
 
       const loadData = async () => {
@@ -594,7 +494,7 @@
           })));
           setInvalidReceipts(invalidData);
         } else {
-          setIsSessionsModalOpen(true);
+          setIsSessionsModalOpen(true); // Open modal if no sessions exist
         }
       };
 
@@ -642,7 +542,7 @@
           setSessions([]);
           setDeletedSessions([]);
           setCurrentSession(null);
-          setIsSessionsModalOpen(true);
+          setIsSessionsModalOpen(true); // Reopen modal on timeout
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
       };
@@ -653,6 +553,7 @@
         const storedKey = await db.settings.get("passwordKey");
         const derivedKey = CryptoJS.PBKDF2(password, "salt", { keySize: 256/32, iterations: 150000 }).toString();
         if (!storedKey) {
+          // Setting new password
           if (!password) {
             setError("Please enter a password");
             return;
@@ -670,6 +571,7 @@
           setConfirmPassword("");
           setIsSettingNewPassword(false);
         } else if (storedKey.value === derivedKey) {
+          // Logging in with existing password
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
           setIsAuthenticated(true);
           await loadData();
@@ -692,7 +594,7 @@
         setSessions([]);
         setDeletedSessions([]);
         setCurrentSession(null);
-        setIsSessionsModalOpen(true);
+        setIsSessionsModalOpen(true); // Reopen modal on logout
       };
 
       const createNewSession = async () => {
@@ -717,7 +619,7 @@
           setPayers([]);
           setInvalidReceipts([]);
           setNewSessionName("");
-          setIsSessionsModalOpen(false);
+          setIsSessionsModalOpen(false); // Close modal after successful creation
           setIsLoading(false);
         }, 500);
       };
@@ -800,7 +702,7 @@
           if (nextSession) {
             await openSession(nextSession.id);
           } else {
-            setIsSessionsModalOpen(true);
+            setIsSessionsModalOpen(true); // Reopen modal if no sessions remain
           }
           
           setError("Session moved to Trash Bin");
@@ -1017,17 +919,22 @@
 
       const parseDate = (dateStr) => {
         if (!dateStr) return null;
+        // Handle formats: DD MMM YYYY HH:MM:SS, DD/MM/YYYY, YYYY/MM/DD
         const regex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/i;
         const match = dateStr.match(regex);
         if (!match) return null;
         let date;
         if (match[0].includes(" ")) {
+          // Format: DD MMM YYYY or DD MMM YYYY HH:MM:SS
           date = new Date(match[0].split(" ").slice(0, 3).join(" "));
         } else {
+          // Format: DD/MM/YYYY or YYYY/MM/DD
           const parts = match[0].split(/[/-]/);
           if (parts[0].length === 4) {
+            // YYYY/MM/DD
             date = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`);
           } else {
+            // DD/MM/YYYY
             date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
           }
         }
@@ -1106,6 +1013,7 @@
             setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`);
             return;
           }
+          // Date validation
           if (restrictDate && minDate) {
             const pdfDate = parseDate(transactionDate);
             const userMinDate = new Date(minDate);
@@ -1178,7 +1086,7 @@
               data: text || "Unable to extract text",
               pngData,
               sessionId: currentSession.id 
-            });
+            }]);
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
@@ -1371,7 +1279,6 @@
             handleLogout={handleLogout}
             scrollToSection={scrollToSection}
             openSessionsModal={openSessionsModal}
-            openChangePasswordModal={openChangePasswordModal}
           />
           <div className="max-w-5xl mx-auto">
             {error && (
@@ -1383,6 +1290,7 @@
               </div>
             )}
 
+            {/* Session Workspace Canvas */}
             <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
               {currentSession && (
                 <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
@@ -1390,6 +1298,7 @@
                 </h3>
               )}
 
+              {/* Add Payer Form */}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
                 <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1443,6 +1352,7 @@
                 </div>
               </div>
 
+              {/* PDF Upload with Drag-and-Drop */}
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
@@ -1488,6 +1398,7 @@
                 </div>
               </div>
 
+              {/* Dashboard */}
               <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
                 <div className="flex flex-col sm:flex-row gap-1 mb-2">
@@ -1588,6 +1499,7 @@
                 </div>
               </div>
 
+              {/* Invalid Receipts */}
               {invalidReceipts.length > 0 && (
                 <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
                   <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
@@ -1599,7 +1511,7 @@
                           <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
                           <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
                           <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
-                          <th className="border-b border-gray-200 p-1 text258-left text-gray-700 font-semibold text-xs">Actions</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1679,12 +1591,6 @@
               permanentlyDeleteSession={permanentlyDeleteSession}
               clearTrashBin={clearTrashBin}
             />
-            <ChangePasswordModal 
-              isOpen={isChangePasswordModalOpen}
-              onClose={closeChangePasswordModal}
-              handleChangePassword={handleChangePassword}
-              error={changePasswordError}
-            />
           </div>
         </div>
       );
@@ -1692,5 +1598,6 @@
 
     ReactDOM.render(<App />, document.getElementById("root"));
   </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93c7f0d9e9d3bff6',t:'MTc0NjY5NjY1MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 </html>
