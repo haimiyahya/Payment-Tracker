@@ -91,69 +91,12 @@
     const { useState, useEffect } = React;
 
     const db = new Dexie("PaymentTrackerDB");
-    db.version(4).stores({
-      students: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
-      invalidReceipts: "++id,filename,reason,data,sessionId",
-      settings: "key,value",
-      paymentSessions: "++id,name",
-      deletedSessions: "++id,name,students,invalidReceipts"
-    });
-    db.version(5).stores({
-      payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
-      invalidReceipts: "++id,filename,reason,data,sessionId",
-      settings: "key,value",
-      paymentSessions: "++id,name",
-      deletedSessions: "++id,name,payers,invalidReceipts"
-    }).upgrade(async (tx) => {
-      console.log("Upgrading database from version 4 to 5");
-      try {
-        const students = await tx.table("students").toArray();
-        if (students.length > 0) {
-          console.log(`Migrating ${students.length} students to payers`);
-          await tx.table("payers").bulkAdd(students);
-          console.log("Migration completed: students copied to payers");
-        }
-        const deletedSessions = await tx.table("deletedSessions").toArray();
-        if (deletedSessions.length > 0) {
-          console.log(`Updating ${deletedSessions.length} deleted sessions`);
-          await tx.table("deletedSessions").bulkPut(
-            deletedSessions.map(session => ({
-              ...session,
-              payers: session.students || [],
-              students: undefined
-            }))
-          );
-          console.log("Migration completed: updated deletedSessions");
-        }
-        await tx.table("students").clear();
-        console.log("Cleared old students table");
-      } catch (err) {
-        console.error("Error during database migration:", err);
-      }
-    });
     db.version(6).stores({
       payers: "++id,name,expectedAmount,paidAmount,transactionDate,status,pdfFilename,sessionId",
       invalidReceipts: "++id,filename,reason,data,pngData,sessionId",
       settings: "key,value",
       paymentSessions: "++id,name",
       deletedSessions: "++id,name,payers,invalidReceipts"
-    }).upgrade(async (tx) => {
-      console.log("Upgrading database from version 5 to 6");
-      try {
-        const invalidReceipts = await tx.table("invalidReceipts").toArray();
-        if (invalidReceipts.length > 0) {
-          console.log(`Updating ${invalidReceipts.length} invalid receipts to include pngData`);
-          await tx.table("invalidReceipts").bulkPut(
-            invalidReceipts.map(receipt => ({
-              ...receipt,
-              pngData: null
-            }))
-          );
-          console.log("Migration completed: added pngData to invalidReceipts");
-        }
-      } catch (err) {
-        console.error("Error during database migration to version 6:", err);
-      }
     });
 
     const BM25 = {
