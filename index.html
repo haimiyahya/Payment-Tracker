@@ -782,10 +782,6 @@
           let nextSession = null;
           if (updatedSessions.length > 0) {
             nextSession = updatedSessions[updatedSessions.length - 1];
-            const beliBukuAgama = updatedSessions.find(s => s.name.toLowerCase() === "beli buku agama");
-            if (beliBukuAgama) {
-              nextSession = beliBukuAgama;
-            }
           }
           setCurrentSession(null);
           setPayers([]);
