@@ -11,23 +11,15 @@
                 var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
                 var firstSheetName = workbook.SheetNames[0];
                 var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
                 var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
                 var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
                 var headerRowIndex = filteredData.findIndex((row, index) =>
                   row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
                 );
-                // Fallback
                 if (headerRowIndex === -1 || headerRowIndex > 25) {
                   headerRowIndex = 0;
                 }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
                 csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
                 return csv;
             } catch (e) {
@@ -208,7 +200,6 @@
 
     function ImageModal({ isOpen, onClose, imageSrc }) {
       if (!isOpen || !imageSrc) return null;
-
       return (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -237,7 +228,6 @@
 
     function PrintPreviewModal({ isOpen, onClose, onPrint, pdfDataUrl, setOrientation, setZoom }) {
       if (!isOpen) return null;
-
       return (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -292,9 +282,7 @@
 
     function SessionsModal({ isOpen, onClose, sessions, deletedSessions, currentSession, setSessions, setDeletedSessions, setCurrentSession, setPayers, setInvalidReceipts, setError, setIsLoading, newSessionName, setNewSessionName, openSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, clearTrashBin }) {
       if (!isOpen) return null;
-
       const mustCreateSession = sessions.length === 0 && !currentSession;
-
       return (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -401,13 +389,11 @@
 
     function NavBar({ isAuthenticated, currentSession, handleLogout, scrollToSection, openSessionsModal }) {
       const [isOpen, setIsOpen] = useState(false);
-
       const navItems = [
         { name: "Home", section: "dashboard" },
         { name: "Sessions", action: openSessionsModal },
         { name: "Logout", action: handleLogout },
       ];
-
       return (
         <nav className="bg-blue-600 text-white fixed top-0 left-0 w-full z-40 shadow-md">
           <div className="max-w-5xl mx-auto px-2">
@@ -513,25 +499,18 @@
       const [pdfDataUrl, setPdfDataUrl] = useState("");
       const [orientation, setOrientation] = useState("portrait");
       const [zoom, setZoom] = useState(1.0);
-      // --- START: New State Variables for Date Validation ---
       const [validateReceiptDate, setValidateReceiptDate] = useState(false);
       const [requiredReceiptDate, setRequiredReceiptDate] = useState("");
-      // --- END: New State Variables for Date Validation ---
 
       const openModal = (imageSrc) => {
         setSelectedImage(imageSrc);
         setIsModalOpen(true);
       };
-
       const closeModal = () => {
         setIsModalOpen(false);
         setSelectedImage(null);
       };
-
-      const openSessionsModal = () => {
-        setIsSessionsModalOpen(true);
-      };
-
+      const openSessionsModal = () => setIsSessionsModalOpen(true);
       const closeSessionsModal = () => {
         if (sessions.length === 0 && !currentSession) return;
         setIsSessionsModalOpen(false);
@@ -564,10 +543,7 @@
         if (element) {
           const navHeight = 40;
           const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-          window.scrollTo({
-            top: elementPosition - navHeight,
-            behavior: "smooth"
-          });
+          window.scrollTo({ top: elementPosition - navHeight, behavior: "smooth" });
         }
       };
 
@@ -592,11 +568,7 @@
           setIsAuthenticated(false);
           await db.settings.delete("session");
           setError("Session timed out. Please log in again.");
-          setPayers([]);
-          setInvalidReceipts([]);
-          setSessions([]);
-          setDeletedSessions([]);
-          setCurrentSession(null);
+          setPayers([]); setInvalidReceipts([]); setSessions([]); setDeletedSessions([]); setCurrentSession(null);
           setIsSessionsModalOpen(true);
         }, 30 * 60 * 1000);
         setSessionTimeout(timeout);
@@ -610,16 +582,10 @@
         if (!storedKey) {
           await db.settings.put({ key: "passwordKey", value: derivedKey });
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
-          setIsAuthenticated(true);
-          await loadData();
-          resetSessionTimeout();
-          setPassword("");
+          setIsAuthenticated(true); await loadData(); resetSessionTimeout(); setPassword("");
         } else if (storedKey.value === derivedKey) {
           await db.settings.put({ key: "session", value: Date.now() + 30 * 60 * 1000 });
-          setIsAuthenticated(true);
-          await loadData();
-          resetSessionTimeout();
-          setPassword("");
+          setIsAuthenticated(true); await loadData(); resetSessionTimeout(); setPassword("");
         } else {
           setError("Incorrect password");
         }
@@ -628,118 +594,61 @@
       const handleLogout = async () => {
         await db.settings.delete("session");
         clearTimeout(sessionTimeout);
-        setIsAuthenticated(false);
-        setError("");
-        setPdfError("");
-        setPayers([]);
-        setInvalidReceipts([]);
-        setSessions([]);
-        setDeletedSessions([]);
-        setCurrentSession(null);
+        setIsAuthenticated(false); setError(""); setPdfError("");
+        setPayers([]); setInvalidReceipts([]); setSessions([]); setDeletedSessions([]); setCurrentSession(null);
         setIsSessionsModalOpen(true);
       };
 
       const createNewSession = async () => {
-        if (!newSessionName.trim()) {
-          setError("Please enter a session name");
-          return;
-        }
+        if (!newSessionName.trim()) { setError("Please enter a session name"); return; }
         const sessionNameLower = newSessionName.trim().toLowerCase();
-        const existingSession = sessions.find(s => s.name.toLowerCase() === sessionNameLower);
-        if (existingSession) {
-          setError("A session with this name already exists. Please choose a different name.");
-          return;
+        if (sessions.find(s => s.name.toLowerCase() === sessionNameLower)) {
+          setError("A session with this name already exists. Please choose a different name."); return;
         }
-        setIsLoading(true);
-        setError("");
+        setIsLoading(true); setError("");
         setTimeout(async () => {
           const session = { name: newSessionName.trim() };
           const sessionId = await db.paymentSessions.add(session);
           const newSessionWithId = { ...session, id: sessionId };
-          setSessions(prev => [...prev, newSessionWithId]);
-          setCurrentSession(newSessionWithId);
-          setPayers([]);
-          setInvalidReceipts([]);
-          setNewSessionName("");
-          setIsSessionsModalOpen(false);
-          setIsLoading(false);
+          setSessions(prev => [...prev, newSessionWithId]); setCurrentSession(newSessionWithId);
+          setPayers([]); setInvalidReceipts([]); setNewSessionName("");
+          setIsSessionsModalOpen(false); setIsLoading(false);
         }, 500);
       };
 
       const openSession = async (sessionId) => {
-        if (!sessionId) {
-          setCurrentSession(null);
-          setPayers([]);
-          setInvalidReceipts([]);
-          setError("");
-          setPdfError("");
-          setIsLoading(false);
-          return;
-        }
+        if (!sessionId) { setCurrentSession(null); setPayers([]); setInvalidReceipts([]); setError(""); setPdfError(""); setIsLoading(false); return; }
         const session = sessions.find(s => s.id === parseInt(sessionId));
-        if (!session) {
-          setError("Session not found");
-          return;
-        }
+        if (!session) { setError("Session not found"); return; }
         setIsLoading(true);
         setTimeout(async () => {
           setCurrentSession(session);
           const payersData = await db.payers.where("sessionId").equals(session.id).toArray();
           const invalidData = await db.invalidReceipts.where("sessionId").equals(session.id).toArray();
-          setPayers(payersData.map(p => ({
-            ...p,
-            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-            pdfFilename: p.pdfFilename || null,
-            transactionDate: p.transactionDate || null
-          })));
+          setPayers(payersData.map(p => ({ ...p, status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"), pdfFilename: p.pdfFilename || null, transactionDate: p.transactionDate || null })));
           setInvalidReceipts(invalidData);
-          setError("");
-          setPdfError("");
-          setIsLoading(false);
+          setError(""); setPdfError(""); setIsLoading(false);
         }, 500);
       };
 
       const deleteSession = async () => {
-        if (!currentSession) {
-          setError("No session selected to delete");
-          return;
-        }
+        if (!currentSession) { setError("No session selected to delete"); return; }
         setIsLoading(true);
         setTimeout(async () => {
           const sessionId = currentSession.id;
           const sessionPayers = await db.payers.where("sessionId").equals(sessionId).toArray();
           const sessionInvalidReceipts = await db.invalidReceipts.where("sessionId").equals(sessionId).toArray();
-          await db.deletedSessions.add({
-            id: sessionId,
-            name: currentSession.name,
-            payers: sessionPayers,
-            invalidReceipts: sessionInvalidReceipts
-          });
+          await db.deletedSessions.add({ id: sessionId, name: currentSession.name, payers: sessionPayers, invalidReceipts: sessionInvalidReceipts });
           await db.paymentSessions.delete(sessionId);
           await db.payers.where("sessionId").equals(sessionId).delete();
           await db.invalidReceipts.where("sessionId").equals(sessionId).delete();
-          setDeletedSessions(prev => [...prev, {
-            id: sessionId,
-            name: currentSession.name,
-            payers: sessionPayers,
-            invalidReceipts: sessionInvalidReceipts
-          }]);
+          setDeletedSessions(prev => [...prev, { id: sessionId, name: currentSession.name, payers: sessionPayers, invalidReceipts: sessionInvalidReceipts }]);
           const updatedSessions = sessions.filter(s => s.id !== sessionId);
           setSessions(updatedSessions);
-          let nextSession = null;
-          if (updatedSessions.length > 0) {
-            nextSession = updatedSessions[updatedSessions.length - 1];
-          }
-          setCurrentSession(null);
-          setPayers([]);
-          setInvalidReceipts([]);
-          if (nextSession) {
-            await openSession(nextSession.id);
-          } else {
-            setIsSessionsModalOpen(true);
-          }
-          setError("Session moved to Trash Bin");
-          setIsLoading(false);
+          let nextSession = updatedSessions.length > 0 ? updatedSessions[updatedSessions.length - 1] : null;
+          setCurrentSession(null); setPayers([]); setInvalidReceipts([]);
+          if (nextSession) { await openSession(nextSession.id); } else { setIsSessionsModalOpen(true); }
+          setError("Session moved to Trash Bin"); setIsLoading(false);
         }, 500);
       };
 
@@ -747,33 +656,19 @@
         setIsLoading(true);
         setTimeout(async () => {
           const deletedSession = deletedSessions.find(s => s.id === sessionId);
-          if (!deletedSession) {
-            setError("Session not found in Trash Bin");
-            setIsLoading(false);
-            return;
-          }
+          if (!deletedSession) { setError("Session not found in Trash Bin"); setIsLoading(false); return; }
           await db.paymentSessions.add({ id: sessionId, name: deletedSession.name });
           const payersToRestore = deletedSession.payers.map(p => ({ ...p, sessionId }));
           const invalidReceiptsToRestore = deletedSession.invalidReceipts.map(r => ({ ...r, sessionId }));
-          if (payersToRestore.length > 0) {
-            await db.payers.bulkAdd(payersToRestore);
-          }
-          if (invalidReceiptsToRestore.length > 0) {
-            await db.invalidReceipts.bulkAdd(invalidReceiptsToRestore);
-          }
+          if (payersToRestore.length > 0) await db.payers.bulkAdd(payersToRestore);
+          if (invalidReceiptsToRestore.length > 0) await db.invalidReceipts.bulkAdd(invalidReceiptsToRestore);
           await db.deletedSessions.delete(sessionId);
           setSessions(prev => [...prev, { id: sessionId, name: deletedSession.name }]);
           setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
           setCurrentSession({ id: sessionId, name: deletedSession.name });
-          setPayers(payersToRestore.map(p => ({
-            ...p,
-            status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"),
-            pdfFilename: p.pdfFilename || null,
-            transactionDate: p.transactionDate || null
-          })));
+          setPayers(payersToRestore.map(p => ({ ...p, status: p.status || (p.paidAmount ? (p.paidAmount === p.expectedAmount ? "Paid" : "Incorrect") : "No File Matched"), pdfFilename: p.pdfFilename || null, transactionDate: p.transactionDate || null })));
           setInvalidReceipts(invalidReceiptsToRestore);
-          setError("Session restored successfully");
-          setIsLoading(false);
+          setError("Session restored successfully"); setIsLoading(false);
         }, 500);
       };
 
@@ -782,41 +677,24 @@
         setTimeout(async () => {
           await db.deletedSessions.delete(sessionId);
           setDeletedSessions(prev => prev.filter(s => s.id !== sessionId));
-          setError("Session permanently deleted");
-          setIsLoading(false);
+          setError("Session permanently deleted"); setIsLoading(false);
         }, 500);
       };
 
       const clearTrashBin = async () => {
         setIsLoading(true);
         setTimeout(async () => {
-          await db.deletedSessions.clear();
-          setDeletedSessions([]);
-          setError("Trash Bin cleared");
-          setIsLoading(false);
+          await db.deletedSessions.clear(); setDeletedSessions([]);
+          setError("Trash Bin cleared"); setIsLoading(false);
         }, 500);
       };
 
       const addPayer = async (e) => {
         e.preventDefault();
-        if (!currentSession) {
-          setError("Please create or select a session first");
-          return;
-        }
+        if (!currentSession) { setError("Please create or select a session first"); return; }
         const { name, expectedAmount } = newPayer;
-        if (!name.trim() || isNaN(expectedAmount) || expectedAmount <= 0) {
-          setError("Invalid name or amount");
-          return;
-        }
-        const payer = {
-          name: name.trim(),
-          expectedAmount: parseFloat(expectedAmount).toFixed(2),
-          paidAmount: null,
-          transactionDate: null,
-          status: "No File Matched",
-          pdfFilename: null,
-          sessionId: currentSession.id
-        };
+        if (!name.trim() || isNaN(expectedAmount) || expectedAmount <= 0) { setError("Invalid name or amount"); return; }
+        const payer = { name: name.trim(), expectedAmount: parseFloat(expectedAmount).toFixed(2), paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null, sessionId: currentSession.id };
         const id = await db.payers.add(payer);
         setPayers(prev => [...prev, { ...payer, id }]);
         setNewPayer({ name: "", expectedAmount: "" });
@@ -827,107 +705,49 @@
         try {
           const text = await file.text();
           Papa.parse(text, {
-            header: true,
-            skipEmptyLines: true,
+            header: true, skipEmptyLines: true,
             complete: async (result) => {
-              const data = result.data;
-              const errors = [];
-              const validPayers = [];
-              const headers = result.meta.fields.map(h => 
-                h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase()
-              );
-              console.log(`Parsed headers: ${JSON.stringify(headers)}`);
-              const requiredHeaders = ["name", "expected amount"];
+              const data = result.data; const errors = []; const validPayers = [];
+              const headers = result.meta.fields.map(h => h.replace(/[\uFEFF"']+/g, '').trim().toLowerCase());
               const nameHeader = headers.find(h => h === "name");
               const amountHeader = headers.find(h => h === "expected amount");
-              if (!nameHeader || !amountHeader) {
-                setError("CSV must have 'Name' and 'Expected Amount' columns (case-insensitive)");
-                return;
-              }
+              if (!nameHeader || !amountHeader) { setError("CSV must have 'Name' and 'Expected Amount' columns (case-insensitive)"); return; }
               const originalNameHeader = result.meta.fields[headers.indexOf("name")];
               const originalAmountHeader = result.meta.fields[headers.indexOf("expected amount")];
               for (let i = 0; i < data.length; i++) {
                 const row = data[i];
                 const name = row[originalNameHeader]?.trim();
                 const expectedAmount = parseFloat(row[originalAmountHeader]);
-                if (!name || isNaN(expectedAmount) || expectedAmount <= 0) {
-                  errors.push(`Row ${i + 2}: Invalid name or amount`);
-                  continue;
-                }
-                validPayers.push({
-                  name,
-                  expectedAmount: expectedAmount.toFixed(2),
-                  paidAmount: null,
-                  transactionDate: null,
-                  status: "No File Matched",
-                  pdfFilename: null,
-                  sessionId: currentSession.id
-                });
+                if (!name || isNaN(expectedAmount) || expectedAmount <= 0) { errors.push(`Row ${i + 2}: Invalid name or amount`); continue; }
+                validPayers.push({ name, expectedAmount: expectedAmount.toFixed(2), paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null, sessionId: currentSession.id });
               }
               if (validPayers.length > 0) {
                 const ids = await db.payers.bulkAdd(validPayers, { allKeys: true });
-                const newPayersData = validPayers.map((payer, index) => ({
-                  ...payer,
-                  id: ids[index]
-                }));
+                const newPayersData = validPayers.map((p, index) => ({ ...p, id: ids[index] }));
                 setPayers(prev => [...prev, ...newPayersData]);
-                console.log(`Added ${newPayersData.length} payers from CSV`);
               }
-              if (errors.length > 0) {
-                setError(`Added ${validPayers.length} payers. Errors: ${errors.join("; ")}`);
-              } else {
-                setError(`Successfully added ${validPayers.length} payers`);
-              }
+              if (errors.length > 0) { setError(`Added ${validPayers.length} payers. Errors: ${errors.join("; ")}`); } 
+              else { setError(`Successfully added ${validPayers.length} payers`); }
             },
-            error: (err) => {
-              console.error(`Error parsing CSV ${file.name}:`, err);
-              setError(`Failed to parse CSV: ${err.message}`);
-            }
+            error: (err) => { console.error(`Error parsing CSV ${file.name}:`, err); setError(`Failed to parse CSV: ${err.message}`); }
           });
-        } catch (err) {
-          console.error(`Error processing CSV ${file.name}:`, err);
-          setError(`Failed to process CSV: ${err.message}`);
-        }
+        } catch (err) { console.error(`Error processing CSV ${file.name}:`, err); setError(`Failed to process CSV: ${err.message}`); }
       };
 
       const handleCSVUpload = async (files) => {
-        if (!currentSession) {
-          setError("Please create or select a session first");
-          return;
-        }
+        if (!currentSession) { setError("Please create or select a session first"); return; }
         const csvFiles = Array.from(files).filter(f => f.type === "text/csv" || f.name.endsWith(".csv"));
-        if (csvFiles.length === 0) {
-          setError("Please upload a valid CSV file");
-          return;
-        }
+        if (csvFiles.length === 0) { setError("Please upload a valid CSV file"); return; }
         setError("");
-        for (const file of csvFiles) {
-          await processCSV(file);
-        }
+        for (const file of csvFiles) { await processCSV(file); }
       };
 
-      const handleCSVDragOver = (e) => {
-        e.preventDefault();
-        setIsDraggingCSV(true);
-      };
-
-      const handleCSVDragLeave = (e) => {
-        e.preventDefault();
-        setIsDraggingCSV(false);
-      };
-
-      const handleCSVDrop = (e) => {
-        e.preventDefault();
-        setIsDraggingCSV(false);
-        const files = e.dataTransfer.files;
-        handleCSVUpload(files);
-      };
+      const handleCSVDragOver = (e) => { e.preventDefault(); setIsDraggingCSV(true); };
+      const handleCSVDragLeave = (e) => { e.preventDefault(); setIsDraggingCSV(false); };
+      const handleCSVDrop = (e) => { e.preventDefault(); setIsDraggingCSV(false); handleCSVUpload(e.dataTransfer.files); };
 
       const editPayer = async (id, updatedPayer) => {
-        if (!updatedPayer.name.trim() || isNaN(updatedPayer.expectedAmount) || updatedPayer.expectedAmount <= 0) {
-          setError("Invalid name or amount");
-          return;
-        }
+        if (!updatedPayer.name.trim() || isNaN(updatedPayer.expectedAmount) || updatedPayer.expectedAmount <= 0) { setError("Invalid name or amount"); return; }
         updatedPayer.expectedAmount = parseFloat(updatedPayer.expectedAmount).toFixed(2);
         await db.payers.update(id, updatedPayer);
         setPayers(prev => prev.map(p => (p.id === id ? { ...p, ...updatedPayer } : p)));
@@ -944,18 +764,17 @@
           const uint8Array = new Uint8Array(arrayBuffer);
           const magicNumber = String.fromCharCode(...uint8Array);
           return magicNumber === "%PDF-";
-        } catch (err) {
-          console.error(`Error validating PDF ${file.name}:`, err);
-          return false;
-        }
+        } catch (err) { console.error(`Error validating PDF ${file.name}:`, err); return false; }
       };
 
-      const processPDF = async (file) => {
+      // Renamed from processPDF and now accepts state as parameters
+      const processPDFLogic = async (file, currentValidateDateFlag, currentRequiredDateValue) => {
         if (!currentSession) {
           setError("Please create or select a session first");
           return;
         }
-        console.log(`Processing PDF: ${file.name}`);
+        console.log(`[processPDFLogic ENTRY] File: ${file.name}, Validate Flag: ${currentValidateDateFlag}, Required Date: ${currentRequiredDateValue}`);
+
         let text = "";
         let pngData = null;
         try {
@@ -972,50 +791,49 @@
           }
           console.log(`Extracted text from ${file.name}: ${text.slice(0, 100)}...`);
 
-          // --- START: New Date Validation Logic ---
-          if (validateReceiptDate && requiredReceiptDate) {
+          // --- START: Modified Date Validation Logic ---
+          if (currentValidateDateFlag && currentRequiredDateValue) {
             const dateRegexForValidation = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
             const pdfDateMatch = text.match(dateRegexForValidation);
 
             if (pdfDateMatch && pdfDateMatch[0]) {
               let pdfDateString = pdfDateMatch[0];
-              pdfDateString = pdfDateString.replace(/\s+\d{2}:\d{2}:\d{2}$/, '').trim(); // Remove time
+              pdfDateString = pdfDateString.replace(/\s+\d{2}:\d{2}:\d{2}$/, '').trim();
               
-              // Attempt to parse various common date formats
               let pdfDate;
-              // Try parsing as is (might work for YYYY-MM-DD, MM/DD/YYYY if JS Date constructor understands it)
-              pdfDate = new Date(pdfDateString);
+              pdfDate = new Date(pdfDateString); // Initial attempt
 
-              // If initial parsing fails or results in an obviously wrong year (e.g. from DD-MM-YY), try specific formats
-              if (isNaN(pdfDate.getTime()) || pdfDate.getFullYear() < 2000) {
+              if (isNaN(pdfDate.getTime()) || pdfDate.getFullYear() < 1970 || pdfDate.getFullYear() > 2100) { // Basic sanity check for year
+                  // More robust parsing for common variants if initial parse fails
                   const parts = pdfDateString.replace(/[\/\s]+/g, '-').split('-');
                   if (parts.length === 3) {
-                      const day = parseInt(parts[0]);
-                      const month = parseInt(parts[1]);
-                      const year = parseInt(parts[2]);
-
-                      if (year >= 0 && year <= 99) { // Handle YY
-                          pdfDate = new Date(year + 2000, month -1, day);
-                      } else if (day <=31 && month <=12 && year >= 2000) { // DD-MM-YYYY
-                          pdfDate = new Date(year, month - 1, day);
-                      } else if (month <=12 && day <=31 && year >=2000) { // MM-DD-YYYY (less likely if previous failed)
-                           pdfDate = new Date(year, month - 1, day);
+                      const p1 = parseInt(parts[0]); const p2 = parseInt(parts[1]); const p3 = parseInt(parts[2]);
+                      // Try DD-MM-YYYY or MM-DD-YYYY (assuming YYYY is the long one)
+                      if (p3 > 1000) { // Year is likely p3
+                          if (p1 <= 31 && p2 <= 12) pdfDate = new Date(p3, p2 - 1, p1); // DD-MM-YYYY
+                          else if (p2 <= 31 && p1 <= 12) pdfDate = new Date(p3, p1 - 1, p2); // MM-DD-YYYY
+                      } else if (p1 > 1000) { // Year is likely p1
+                          if (p2 <= 12 && p3 <= 31) pdfDate = new Date(p1, p2-1, p3); // YYYY-MM-DD
+                          else if (p3 <= 12 && p2 <=31) pdfDate = new Date(p1, p3-1, p2); // YYYY-DD-MM (less common)
                       }
-                  } else { // Try to parse with month names
+                       // Handle YY case if year is short and others are day/month
+                      else if (p3 >=0 && p3 <=99 && p1 <=31 && p2 <=12) pdfDate = new Date(p3+2000, p2-1, p1); // DD-MM-YY
+                      else if (p3 >=0 && p3 <=99 && p2 <=31 && p1 <=12) pdfDate = new Date(p3+2000, p1-1, p2); // MM-DD-YY
+
+                  } else { // Try to parse with month names if parts aren't 3 numeric
                     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
                     let potentialDateStr = pdfDateString;
                     monthNames.forEach((monthName, index) => {
                         potentialDateStr = potentialDateStr.replace(new RegExp(monthName, 'i'), (index + 1).toString());
                     });
-                    pdfDate = new Date(potentialDateStr);
+                    pdfDate = new Date(potentialDateStr.replace(/\s+/g, '-')); // Replace spaces with hyphens for better parsing
                   }
               }
               
-              const requiredDate = new Date(requiredReceiptDate); // HTML date input is YYYY-MM-DD
+              const requiredDateFromInput = new Date(currentRequiredDateValue); 
 
               if (isNaN(pdfDate.getTime())) {
                 const reason = `Could not parse a valid date from PDF string: "${pdfDateMatch[0]}"`;
-                console.log(`Invalid receipt (date parsing failed): ${file.name}, Reason: ${reason}`);
                 pngData = await convertPDFToPNG(file);
                 const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
                 setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
@@ -1024,11 +842,10 @@
               }
               
               pdfDate.setHours(0, 0, 0, 0);
-              requiredDate.setHours(0, 0, 0, 0);
+              requiredDateFromInput.setHours(0, 0, 0, 0);
 
-              if (pdfDate < requiredDate) {
-                const reason = `Date in PDF (${pdfDate.toLocaleDateString()}) is older than required date (${requiredDate.toLocaleDateString()})`;
-                console.log(`Invalid receipt (date validation failed): ${file.name}, Reason: ${reason}`);
+              if (pdfDate < requiredDateFromInput) {
+                const reason = `Date in PDF (${pdfDate.toLocaleDateString()}) is older than required date (${requiredDateFromInput.toLocaleDateString()})`;
                 pngData = await convertPDFToPNG(file);
                 const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
                 setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
@@ -1037,7 +854,6 @@
               }
             } else {
               const reason = `Required date validation is active, but no date was found in the PDF.`;
-              console.log(`Invalid receipt (date not found in PDF): ${file.name}, Reason: ${reason}`);
               pngData = await convertPDFToPNG(file);
               const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
               setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
@@ -1045,7 +861,7 @@
               return; 
             }
           }
-          // --- END: New Date Validation Logic ---
+          // --- END: Modified Date Validation Logic ---
 
           const nameRegex = payers.map(p => new RegExp(`\\b${p.name}\\b`, "i"));
           const amountRegex = /\RM?\d+\.\d{2}\b|\d+\s*RM\b/i;
@@ -1063,110 +879,60 @@
           const amountMatch = text.match(amountRegex);
           const extractedAmount = amountMatch ? parseFloat(amountMatch[0].replace(/[^\d.]/g, "")) : null;
           let transactionDate = null;
-          const dateMatchForDisplay = text.match(transactionDateRegex); // Use the original regex for display
+          const dateMatchForDisplay = text.match(transactionDateRegex); 
           if (dateMatchForDisplay) {
             transactionDate = dateMatchForDisplay[0];
-            console.log(`Extracted transaction date for display from ${file.name}: ${transactionDate}`);
           }
-          console.log(`Extracted from ${file.name}: Name=${matchedName}, Amount=${extractedAmount}, Date=${transactionDate}`);
           let matchedPayer = null;
           if (matchedName) {
             matchedPayer = payers.find(p => p.name.toLowerCase() === matchedName.toLowerCase());
-            console.log(`Matched by name: ${matchedPayer ? matchedPayer.name : 'None'}`);
           } else {
             const filename = file.name.replace(".pdf", "");
-            matchedPayer = BM25.match(filename, payers.filter(p => p.status === "No File Matched" || p.status === "Unpaid")); // Only match against unpaid
-            console.log(`BM25 match for ${filename}: ${matchedPayer ? matchedPayer.name : 'None'}`);
+            matchedPayer = BM25.match(filename, payers.filter(p => p.status === "No File Matched" || p.status === "Unpaid")); 
           }
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
-            console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
             await db.invalidReceipts.delete(existingReceipt.id);
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
           const payerWithPDF = payers.find(p => p.pdfFilename === file.name && p.sessionId === currentSession.id);
           if (payerWithPDF) {
-            console.log(`PDF ${file.name} is already associated with payer ${payerWithPDF.name}. Skipping.`);
             setPdfError(`PDF ${file.name} is already associated with ${payerWithPDF.name}.`);
             return;
           }
           if (!matchedPayer || !extractedAmount) {
             let reason = "No payer matched";
-            if (matchedPayer && !extractedAmount) {
-              reason = "No amount found in PDF";
-            }
-            console.log(`Generating PNG for invalid receipt: ${file.name}`);
+            if (matchedPayer && !extractedAmount) reason = "No amount found in PDF";
             pngData = await convertPDFToPNG(file);
-            console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
-            const id = await db.invalidReceipts.add({ 
-              filename: file.name, 
-              reason, 
-              data: text || "Unable to extract text",
-              pngData,
-              sessionId: currentSession.id 
-            });
-            setInvalidReceipts(prev => [...prev, { 
-              id, 
-              filename: file.name, 
-              reason, 
-              data: text || "Unable to extract text",
-              pngData,
-              sessionId: currentSession.id 
-            }]);
+            const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
+            setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
             setPdfError(`Failed to process ${file.name}: ${reason}. You can manually assign this receipt below.`);
             return;
           }
           const status = extractedAmount.toFixed(2) === matchedPayer.expectedAmount ? "Paid" : "Incorrect";
-          console.log(`Updating payer ${matchedPayer.name}: Status=${status}, Amount=${extractedAmount}, Date=${transactionDate}, PDF=${file.name}`);
-          await db.payers.update(matchedPayer.id, { 
-            paidAmount: extractedAmount.toFixed(2), 
-            transactionDate: transactionDate,
-            status, 
-            pdfFilename: file.name 
-          });
-          setPayers(prev => prev.map(p => 
-            p.id === matchedPayer.id ? { ...p, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : p
-          ));
+          await db.payers.update(matchedPayer.id, { paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name });
+          setPayers(prev => prev.map(p => p.id === matchedPayer.id ? { ...p, paidAmount: extractedAmount.toFixed(2), transactionDate: transactionDate, status, pdfFilename: file.name } : p));
         } catch (err) {
           console.error(`Error processing ${file.name}:`, err);
-          let userFriendlyMessage = "The file may be corrupted or not a valid PDF. Please upload a different file.";
-          if (err.message.includes("Invalid PDF format")) {
-            userFriendlyMessage = "The file is not a valid PDF. Please upload a different file.";
-          } else if (err.message.includes("doc is not defined")) {
-            userFriendlyMessage = "The file could not be read as a PDF. It may be corrupted or in an unsupported format.";
-          } else if (err.message.includes("Invalid PDF structure")) {
-            userFriendlyMessage = "The PDF structure is invalid. Please upload a different file.";
-          }
+          let userFriendlyMessage = "The file may be corrupted or not a valid PDF.";
+          if (err.message.includes("Invalid PDF format")) userFriendlyMessage = "The file is not a valid PDF.";
+          else if (err.message.includes("doc is not defined")) userFriendlyMessage = "The file could not be read as a PDF.";
+          else if (err.message.includes("Invalid PDF structure")) userFriendlyMessage = "The PDF structure is invalid.";
           const reason = `Failed to process: ${userFriendlyMessage}`;
-          console.log(`Generating PNG for invalid receipt: ${file.name}`);
           pngData = await convertPDFToPNG(file);
           const existingReceipt = await db.invalidReceipts.where("filename").equals(file.name).and(r => r.sessionId === currentSession.id).first();
           if (existingReceipt) {
-            console.log(`Removing previously invalid receipt ${file.name} to reprocess`);
             await db.invalidReceipts.delete(existingReceipt.id);
             setInvalidReceipts(prev => prev.filter(r => r.id !== existingReceipt.id));
           }
-          console.log(`Invalid receipt: ${file.name}, Reason: ${reason}`);
-          const id = await db.invalidReceipts.add({ 
-            filename: file.name, 
-            reason, 
-            data: text || "Unable to extract text",
-            pngData,
-            sessionId: currentSession.id 
-          });
-          setInvalidReceipts(prev => [...prev, { 
-            id, 
-            filename: file.name, 
-            reason, 
-            data: text || "Unable to extract text",
-            pngData,
-            sessionId: currentSession.id 
-          }]);
+          const id = await db.invalidReceipts.add({ filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id });
+          setInvalidReceipts(prev => [...prev, { id, filename: file.name, reason, data: text || "Unable to extract text", pngData, sessionId: currentSession.id }]);
           setPdfError(`Failed to process ${file.name}: ${userFriendlyMessage}`);
         }
       };
 
       const handleFileUpload = async (files) => {
+        console.log(`[handleFileUpload ENTRY] Validate Checkbox: ${validateReceiptDate}, Required Date: ${requiredReceiptDate}`);
         const pdfFiles = Array.from(files).filter(f => f.type === "application/pdf" || f.name.endsWith(".pdf"));
         if (pdfFiles.length === 0) {
           setPdfError("Please upload files with a .pdf extension");
@@ -1174,69 +940,36 @@
         }
         setPdfError("");
         for (const file of pdfFiles) {
-          await processPDF(file);
+          await processPDFLogic(file, validateReceiptDate, requiredReceiptDate);
         }
       };
 
-      const handleDragOver = (e) => {
-        e.preventDefault();
-        setIsDragging(true);
-      };
-
-      const handleDragLeave = (e) => {
-        e.preventDefault();
-        setIsDragging(false);
-      };
-
-      const handleDrop = (e) => {
-        e.preventDefault();
-        setIsDragging(false);
-        const files = e.dataTransfer.files;
-        handleFileUpload(files);
-      };
+      const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+      const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
+      const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); handleFileUpload(e.dataTransfer.files); };
 
       const assignReceipt = async (receiptId, payerId, amount) => {
-        if (!payerId || isNaN(amount) || amount <= 0) {
-          setError("Invalid payer or amount");
-          return;
-        }
+        if (!payerId || isNaN(amount) || amount <= 0) { setError("Invalid payer or amount"); return; }
         const payer = payers.find(p => p.id === parseInt(payerId));
         const receipt = invalidReceipts.find(r => r.id === receiptId);
-        if (!payer || !receipt) {
-            setError("Payer or receipt not found for assignment.");
-            return;
-        }
+        if (!payer || !receipt) { setError("Payer or receipt not found for assignment."); return; }
         const status = parseFloat(amount).toFixed(2) === payer.expectedAmount ? "Paid" : "Incorrect";
-        
-        // Extract date from receipt.data if possible for transactionDate
         let transactionDate = null;
         const dateRegex = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{2}:\d{2}:\d{2})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?)\b/i;
         if(receipt.data) {
             const dateMatch = receipt.data.match(dateRegex);
-            if (dateMatch) {
-                transactionDate = dateMatch[0];
-            }
+            if (dateMatch) transactionDate = dateMatch[0];
         }
-
-        await db.payers.update(payer.id, { 
-          paidAmount: parseFloat(amount).toFixed(2), 
-          transactionDate: transactionDate,
-          status, 
-          pdfFilename: receipt.filename 
-        });
+        await db.payers.update(payer.id, { paidAmount: parseFloat(amount).toFixed(2), transactionDate: transactionDate, status, pdfFilename: receipt.filename });
         await db.invalidReceipts.delete(receiptId);
-        setPayers(prev => prev.map(p => 
-          p.id === payer.id ? { ...p, paidAmount: parseFloat(amount).toFixed(2), transactionDate: transactionDate, status, pdfFilename: receipt.filename } : p
-        ));
+        setPayers(prev => prev.map(p => p.id === payer.id ? { ...p, paidAmount: parseFloat(amount).toFixed(2), transactionDate: transactionDate, status, pdfFilename: receipt.filename } : p));
         setInvalidReceipts(prev => prev.filter(r => r.id !== receiptId));
         setPdfError("");
       };
 
       const deletePayment = async (id) => {
         await db.payers.update(id, { paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null });
-        setPayers(prev => prev.map(p => 
-          p.id === id ? { ...p, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : p
-        ));
+        setPayers(prev => prev.map(p => p.id === id ? { ...p, paidAmount: null, transactionDate: null, status: "No File Matched", pdfFilename: null } : p));
       };
 
       const deleteInvalidReceipt = async (id) => {
@@ -1246,67 +979,25 @@
 
       const exportToCSV = () => {
         const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
-        const rows = filteredPayers.map(p => [ // Use filteredPayers for consistency with displayed data
-          p.name,
-          p.expectedAmount,
-          p.paidAmount || "",
-          p.transactionDate || "",
-          p.status,
-          p.pdfFilename || ""
-        ]);
+        const rows = filteredPayers.map(p => [ p.name, p.expectedAmount, p.paidAmount || "", p.transactionDate || "", p.status, p.pdfFilename || "" ]);
         const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
         a.download = `payment_tracker_${currentSession ? currentSession.name.replace(/\s+/g, "_") : "unnamed"}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        a.click(); URL.revokeObjectURL(url);
       };
 
       const generatePDF = () => {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({
-          orientation: orientation,
-          unit: 'mm',
-          format: 'a4'
-        });
-
-        // Header
-        doc.setFontSize(16 * zoom);
-        doc.text("Payment Tracker - Payment Status", 14, 20);
-        doc.setFontSize(12 * zoom);
-        doc.text(`Session: ${currentSession ? currentSession.name : "Unnamed"}`, 14, 30);
+        const doc = new jsPDF({ orientation: orientation, unit: 'mm', format: 'a4' });
+        doc.setFontSize(16 * zoom); doc.text("Payment Tracker - Payment Status", 14, 20);
+        doc.setFontSize(12 * zoom); doc.text(`Session: ${currentSession ? currentSession.name : "Unnamed"}`, 14, 30);
         doc.text(`Exported on: ${new Date().toLocaleString()}`, 14, 40);
-
-        // Table
         const headers = ["Name", "Expected Amount", "Paid Amount", "Transaction Date", "Status", "PDF File"];
-        const rows = filteredPayers.map(p => [
-          p.name,
-          `RM${p.expectedAmount}`,
-          p.paidAmount ? `RM${p.paidAmount}` : "-",
-          p.transactionDate || "-",
-          p.status,
-          p.pdfFilename || "-"
-        ]);
-
-        doc.autoTable({
-          startY: 50,
-          head: [headers],
-          body: rows,
-          theme: "grid",
-          styles: { fontSize: 8 * zoom, cellPadding: 2 * zoom },
-          columnStyles: {
-            0: { cellWidth: 40 * zoom }, // Name
-            1: { cellWidth: 30 * zoom }, // Expected Amount
-            2: { cellWidth: 30 * zoom }, // Paid Amount
-            3: { cellWidth: 40 * zoom }, // Transaction Date
-            4: { cellWidth: 30 * zoom }, // Status
-            5: { cellWidth: 40 * zoom }  // PDF File
-          },
-          margin: { top: 50, left: 14, right: 14 }
-        });
-
+        const rows = filteredPayers.map(p => [p.name, `RM${p.expectedAmount}`, p.paidAmount ? `RM${p.paidAmount}` : "-", p.transactionDate || "-", p.status, p.pdfFilename || "-"]);
+        doc.autoTable({ startY: 50, head: [headers], body: rows, theme: "grid", styles: { fontSize: 8 * zoom, cellPadding: 2 * zoom }, columnStyles: { 0: { cellWidth: 40 * zoom }, 1: { cellWidth: 30 * zoom }, 2: { cellWidth: 30 * zoom }, 3: { cellWidth: 40 * zoom }, 4: { cellWidth: 30 * zoom }, 5: { cellWidth: 40 * zoom } }, margin: { top: 50, left: 14, right: 14 } });
         return doc;
       };
 
@@ -1314,8 +1005,7 @@
         const doc = generatePDF();
         const pdfBlob = doc.output('blob');
         const pdfUrl = URL.createObjectURL(pdfBlob);
-        setPdfDataUrl(pdfUrl);
-        setIsPrintPreviewOpen(true);
+        setPdfDataUrl(pdfUrl); setIsPrintPreviewOpen(true);
       };
 
       const handlePrint = () => {
@@ -1323,19 +1013,17 @@
         const sessionName = currentSession ? currentSession.name.replace(/\s+/g, "_") : "unnamed";
         const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
         doc.save(`payment_status_${sessionName}_${date}.pdf`);
-        setIsPrintPreviewOpen(false);
-        URL.revokeObjectURL(pdfDataUrl);
+        setIsPrintPreviewOpen(false); if (pdfDataUrl) URL.revokeObjectURL(pdfDataUrl);
       };
 
-      const filteredPayers = payers.filter(p => 
-        filter === "All" || p.status === filter
-      ).sort((a, b) => {
-        if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-        if (sortBy === "name-desc") return b.name.localeCompare(b.name); // Corrected: was b.name.localeCompare(b.name)
-        if (sortBy === "status-asc") return a.status.localeCompare(b.status);
-        if (sortBy === "status-desc") return b.status.localeCompare(b.status);
-        return 0; // Default return
-      });
+      const filteredPayers = payers.filter(p => filter === "All" || p.status === filter)
+        .sort((a, b) => {
+          if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+          if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+          if (sortBy === "status-asc") return a.status.localeCompare(b.status);
+          if (sortBy === "status-desc") return b.status.localeCompare(a.status);
+          return 0;
+        });
 
       if (!isAuthenticated) {
         return (
@@ -1344,20 +1032,8 @@
               <h1 className="text-base font-bold text-gray-800 mb-2 text-center">Payment Tracker</h1>
               {error && <p className="text-red-500 mb-1 text-center text-xs">{error}</p>}
               <form onSubmit={handleLogin}>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full p-1 mb-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                  required
-                />
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 text-white p-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                >
-                  Login
-                </button>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" className="w-full p-1 mb-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" required />
+                <button type="submit" className="w-full bg-blue-600 text-white p-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs">Login</button>
               </form>
             </div>
           </div>
@@ -1366,195 +1042,61 @@
 
       return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-2">
-          <NavBar
-            isAuthenticated={isAuthenticated}
-            currentSession={currentSession}
-            handleLogout={handleLogout}
-            scrollToSection={scrollToSection}
-            openSessionsModal={openSessionsModal}
-          />
+          <NavBar isAuthenticated={isAuthenticated} currentSession={currentSession} handleLogout={handleLogout} scrollToSection={scrollToSection} openSessionsModal={openSessionsModal} />
           <div className="max-w-5xl mx-auto">
-            {error && (
-              <p className="text-red-500 bg-red-50 p-1 rounded mb-2 text-xs animate-pulse">{error}</p>
-            )}
-            {isLoading && (
-              <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div>
-              </div>
-            )}
-
+            {error && (<p className="text-red-500 bg-red-50 p-1 rounded mb-2 text-xs animate-pulse">{error}</p>)}
+            {isLoading && (<div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div></div>)}
             <div id="dashboard" className="bg-white border border-gray-100 rounded-lg p-3 mb-3 mt-12 shadow-lg">
-              {currentSession && (
-                <h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">
-                  {currentSession.name}
-                </h3>
-              )}
-
+              {currentSession && (<h3 className="text-base font-bold text-gray-800 text-center bg-blue-50 p-1 rounded mb-3">{currentSession.name}</h3>)}
               <div id="add-payer" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Add Payer</h2>
                 <form onSubmit={addPayer} className="flex flex-col sm:flex-row gap-1 mb-2">
-                  <input
-                    type="text"
-                    value={newPayer.name}
-                    onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })}
-                    placeholder="Payer Name"
-                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                    required
-                  />
-                  <input
-                    type="number"
-                    value={newPayer.expectedAmount}
-                    onChange={(e) => setNewPayer({ ...newPayer, expectedAmount: e.target.value })}
-                    placeholder="Expected Amount (RM)"
-                    step="0.01"
-                    min="0"
-                    className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs"
-                  >
-                    Add
-                  </button>
+                  <input type="text" value={newPayer.name} onChange={(e) => setNewPayer({ ...newPayer, name: e.target.value })} placeholder="Payer Name" className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" required />
+                  <input type="number" value={newPayer.expectedAmount} onChange={(e) => setNewPayer({ ...newPayer, expectedAmount: e.target.value })} placeholder="Expected Amount (RM)" step="0.01" min="0" className="p-1 border border-gray-200 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" required />
+                  <button type="submit" className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 text-xs">Add</button>
                 </form>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
-                    isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
-                  }`}
-                  onDragOver={handleCSVDragOver}
-                  onDragLeave={handleCSVDragLeave}
-                  onDrop={handleCSVDrop}
-                >
+                <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${isDraggingCSV ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'}`} onDragOver={handleCSVDragOver} onDragLeave={handleCSVDragLeave} onDrop={handleCSVDrop}>
                   <p className="mb-1 text-gray-600 text-xs">Drag and drop a CSV file with payer names and expected amounts, or click to select</p>
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={(e) => handleCSVUpload(e.target.files)}
-                    className="hidden"
-                    id="csvInput"
-                  />
-                  <label
-                    htmlFor="csvInput"
-                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs"
-                  >
-                    Select CSV File
-                  </label>
+                  <input type="file" accept=".csv" onChange={(e) => handleCSVUpload(e.target.files)} className="hidden" id="csvInput" />
+                  <label htmlFor="csvInput" className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs">Select CSV File</label>
                 </div>
               </div>
-
               <div id="upload-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Upload Receipts</h2>
                 {pdfError && <p className="text-red-500 bg-red-50 p-1 rounded mb-1 text-xs">{pdfError}</p>}
-                {/* --- START: New UI Elements for Date Validation --- */}
                 <div className="flex items-center mb-2 space-x-2">
-                  <input
-                    type="checkbox"
-                    id="validateDateCheckbox"
-                    checked={validateReceiptDate}
-                    onChange={(e) => setValidateReceiptDate(e.target.checked)}
-                    className="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500" /* Adjusted size */
-                  />
-                  <label htmlFor="validateDateCheckbox" className="text-xs text-gray-700">
-                    Validate: Receipt date must be on or after
-                  </label>
-                  <input
-                    type="date"
-                    value={requiredReceiptDate}
-                    onChange={(e) => setRequiredReceiptDate(e.target.value)}
-                    disabled={!validateReceiptDate}
-                    className={`p-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!validateReceiptDate ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  />
+                  <input type="checkbox" id="validateDateCheckbox" checked={validateReceiptDate} onChange={(e) => setValidateReceiptDate(e.target.checked)} className="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                  <label htmlFor="validateDateCheckbox" className="text-xs text-gray-700">Validate: Receipt date must be on or after</label>
+                  <input type="date" value={requiredReceiptDate} onChange={(e) => setRequiredReceiptDate(e.target.value)} disabled={!validateReceiptDate} className={`p-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!validateReceiptDate ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
                 </div>
-                {/* --- END: New UI Elements for Date Validation --- */}
-                <div
-                  className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${
-                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
+                <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-all duration-300 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
                   <p className="mb-1 text-gray-600 text-xs">Drag and drop PDF files here or click to select</p>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    onChange={(e) => handleFileUpload(e.target.files)}
-                    className="hidden"
-                    id="fileInput"
-                  />
-                  <label
-                    htmlFor="fileInput"
-                    className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs"
-                  >
-                    Select Files
-                  </label>
+                  <input type="file" accept=".pdf" multiple onChange={(e) => handleFileUpload(e.target.files)} className="hidden" id="fileInput" />
+                  <label htmlFor="fileInput" className="bg-blue-600 text-white px-2 py-1 rounded shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-300 cursor-pointer text-xs">Select Files</label>
                 </div>
               </div>
-
               <div className="bg-gray-50 p-3 rounded-lg shadow-sm mb-3">
                 <h2 className="text-base font-semibold text-gray-800 mb-2">Payment Status</h2>
                 <div className="flex flex-col sm:flex-row gap-1 mb-2">
-                  <select
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                  >
-                    <option value="All">All</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Incorrect">Incorrect</option>
-                    <option value="No File Matched">No File Matched</option>
+                  <select value={filter} onChange={(e) => setFilter(e.target.value)} className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs">
+                    <option value="All">All</option> <option value="Paid">Paid</option> <option value="Unpaid">Unpaid</option> <option value="Incorrect">Incorrect</option> <option value="No File Matched">No File Matched</option>
                   </select>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                  >
-                    <option value="name-asc">Name (A-Z)</option>
-                    <option value="name-desc">Name (Z-A)</option>
-                    <option value="status-asc">Status (A-Z)</option>
-                    <option value="status-desc">Status (Z-A)</option>
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs">
+                    <option value="name-asc">Name (A-Z)</option> <option value="name-desc">Name (Z-A)</option> <option value="status-asc">Status (A-Z)</option> <option value="status-desc">Status (Z-A)</option>
                   </select>
-                  <button
-                    onClick={exportToCSV}
-                    className="bg-green-600 text-white px-2 py-1 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-xs"
-                  >
-                    Export to CSV
-                  </button>
-                  <button
-                    onClick={exportToPDF}
-                    className="bg-purple-600 text-white px-2 py-1 rounded shadow-md hover:bg-purple-700 hover:shadow-lg transition-all duration-300 text-xs"
-                  >
-                    Export to PDF
-                  </button>
+                  <button onClick={exportToCSV} className="bg-green-600 text-white px-2 py-1 rounded shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-300 text-xs">Export to CSV</button>
+                  <button onClick={exportToPDF} className="bg-purple-600 text-white px-2 py-1 rounded shadow-md hover:bg-purple-700 hover:shadow-lg transition-all duration-300 text-xs">Export to PDF</button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Name</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Paid Amount</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Transaction Date</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Status</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">PDF File</th>
-                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                        <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Name</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Expected Amount</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Paid Amount</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Transaction Date</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Status</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">PDF File</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPayers.map(payer => (
-                        <tr 
-                          key={payer.id} 
-                          className={
-                            payer.status === "Paid" 
-                              ? "bg-green-50 hover:bg-green-100" 
-                              : payer.status === "Incorrect" 
-                              ? "bg-orange-50 hover:bg-orange-100" 
-                              : "bg-white hover:bg-gray-50"
-                          }
-                        >
+                        <tr key={payer.id} className={payer.status === "Paid" ? "bg-green-50 hover:bg-green-100" : payer.status === "Incorrect" ? "bg-orange-50 hover:bg-orange-100" : "bg-white hover:bg-gray-50"}>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.name}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">RM{payer.expectedAmount}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.paidAmount ? `RM${payer.paidAmount}` : "-"}</td>
@@ -1562,35 +1104,9 @@
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.status}</td>
                           <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{payer.pdfFilename || "-"}</td>
                           <td className="border-b border-gray-200 p-1 flex flex-wrap gap-1">
-                            <button
-                              onClick={() => {
-                                const newName = prompt("Enter new name", payer.name);
-                                const newAmount = prompt("Enter new expected amount", payer.expectedAmount);
-                                if (newName !== null && newAmount !== null) { // Check for null (cancel button)
-                                  editPayer(payer.id, {
-                                    name: newName,
-                                    expectedAmount: newAmount
-                                  });
-                                }
-                              }}
-                              className="bg-yellow-500 text-white px-1 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deletePayer(payer.id)}
-                              className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
-                            >
-                              Delete
-                            </button>
-                            {payer.paidAmount && (
-                              <button
-                                onClick={() => deletePayment(payer.id)}
-                                className="bg-gray-500 text-white px-1 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs"
-                              >
-                                Clear Payment
-                              </button>
-                            )}
+                            <button onClick={() => { const newName = prompt("Enter new name", payer.name); const newAmount = prompt("Enter new expected amount", payer.expectedAmount); if (newName !== null && newAmount !== null) { editPayer(payer.id, { name: newName, expectedAmount: newAmount }); } }} className="bg-yellow-500 text-white px-1 py-1 rounded shadow-sm hover:bg-yellow-600 hover:shadow-md transition-all duration-300 text-xs">Edit</button>
+                            <button onClick={() => deletePayer(payer.id)} className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs">Delete</button>
+                            {payer.paidAmount && (<button onClick={() => deletePayment(payer.id)} className="bg-gray-500 text-white px-1 py-1 rounded shadow-sm hover:bg-gray-600 hover:shadow-md transition-all duration-300 text-xs">Clear Payment</button>)}
                           </td>
                         </tr>
                       ))}
@@ -1598,7 +1114,6 @@
                   </table>
                 </div>
               </div>
-
               {invalidReceipts.length > 0 && (
                 <div id="invalid-receipts" className="bg-gray-50 p-3 rounded-lg shadow-sm">
                   <h2 className="text-base font-semibold text-gray-800 mb-2">Invalid Receipts</h2>
@@ -1606,59 +1121,22 @@
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th>
-                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
+                          <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Filename</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Preview</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Reason</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Assign</th> <th className="border-b border-gray-200 p-1 text-left text-gray-700 font-semibold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invalidReceipts.map(receipt => (
                           <tr key={receipt.id} className="hover:bg-gray-50">
                             <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.filename}</td>
-                            <td className="border-b border-gray-200 p-1 text-gray-700">
-                              {receipt.pngData ? (
-                                <img 
-                                  src={receipt.pngData} 
-                                  alt="PDF Preview" 
-                                  className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer"
-                                  onClick={() => openModal(receipt.pngData)}
-                                />
-                              ) : (
-                                <span className="text-gray-500 text-xs">No preview available</span>
-                              )}
-                            </td>
+                            <td className="border-b border-gray-200 p-1 text-gray-700">{receipt.pngData ? (<img src={receipt.pngData} alt="PDF Preview" className="max-w-[80px] h-auto rounded shadow-sm cursor-pointer" onClick={() => openModal(receipt.pngData)} />) : (<span className="text-gray-500 text-xs">No preview</span>)}</td>
                             <td className="border-b border-gray-200 p-1 text-gray-700 text-xs">{receipt.reason}</td>
                             <td className="border-b border-gray-200 p-1 flex gap-1">
-                              <select
-                                className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
-                                defaultValue=""
-                                onChange={(e) => {
-                                  const selectedPayerId = e.target.value;
-                                  if (selectedPayerId) {
-                                      const amount = prompt(`Enter amount for ${payers.find(p => p.id === parseInt(selectedPayerId))?.name || 'this payer'}`);
-                                      if (amount !== null) { // Check if prompt was not cancelled
-                                          assignReceipt(receipt.id, selectedPayerId, amount);
-                                      }
-                                  }
-                                  e.target.value = ""; // Reset select after action
-                                }}
-                              >
+                              <select className="p-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs" defaultValue="" onChange={(e) => { const selPayerId = e.target.value; if (selPayerId) { const amt = prompt(`Enter amount for ${payers.find(p=>p.id===parseInt(selPayerId))?.name || 'payer'}`); if (amt !== null) { assignReceipt(receipt.id, selPayerId, amt); } } e.target.value = ""; }}>
                                 <option value="">Select Payer</option>
-                                {payers.filter(p => !p.pdfFilename).map(p => ( // Only show payers without a PDF
-                                  <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
+                                {payers.filter(p => !p.pdfFilename).map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                               </select>
                             </td>
-                            <td className="border-b border-gray-200 p-1">
-                              <button
-                                onClick={() => deleteInvalidReceipt(receipt.id)}
-                                className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs"
-                              >
-                                Delete
-                              </button>
-                            </td>
+                            <td className="border-b border-gray-200 p-1"><button onClick={() => deleteInvalidReceipt(receipt.id)} className="bg-red-500 text-white px-1 py-1 rounded shadow-sm hover:bg-red-600 hover:shadow-md transition-all duration-300 text-xs">Delete</button></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1667,50 +1145,13 @@
                 </div>
               )}
             </div>
-
-            <ImageModal 
-              isOpen={isModalOpen}
-              onClose={closeModal}
-              imageSrc={selectedImage}
-            />
-            <SessionsModal 
-              isOpen={isSessionsModalOpen}
-              onClose={closeSessionsModal}
-              sessions={sessions}
-              deletedSessions={deletedSessions}
-              currentSession={currentSession}
-              setSessions={setSessions}
-              setDeletedSessions={setDeletedSessions}
-              setCurrentSession={setCurrentSession}
-              setPayers={setPayers}
-              setInvalidReceipts={setInvalidReceipts}
-              setError={setError}
-              setIsLoading={setIsLoading}
-              newSessionName={newSessionName}
-              setNewSessionName={setNewSessionName}
-              openSession={openSession}
-              createNewSession={createNewSession}
-              deleteSession={deleteSession}
-              restoreSession={restoreSession}
-              permanentlyDeleteSession={permanentlyDeleteSession}
-              clearTrashBin={clearTrashBin}
-            />
-            <PrintPreviewModal
-              isOpen={isPrintPreviewOpen}
-              onClose={() => {
-                setIsPrintPreviewOpen(false);
-                if (pdfDataUrl) URL.revokeObjectURL(pdfDataUrl); // Check if pdfDataUrl exists
-              }}
-              onPrint={handlePrint}
-              pdfDataUrl={pdfDataUrl}
-              setOrientation={setOrientation}
-              setZoom={setZoom}
-            />
+            <ImageModal isOpen={isModalOpen} onClose={closeModal} imageSrc={selectedImage} />
+            <SessionsModal isOpen={isSessionsModalOpen} onClose={closeSessionsModal} sessions={sessions} deletedSessions={deletedSessions} currentSession={currentSession} setSessions={setSessions} setDeletedSessions={setDeletedSessions} setCurrentSession={setCurrentSession} setPayers={setPayers} setInvalidReceipts={setInvalidReceipts} setError={setError} setIsLoading={setIsLoading} newSessionName={newSessionName} setNewSessionName={setNewSessionName} openSession={openSession} createNewSession={createNewSession} deleteSession={deleteSession} restoreSession={restoreSession} permanentlyDeleteSession={permanentlyDeleteSession} clearTrashBin={clearTrashBin} />
+            <PrintPreviewModal isOpen={isPrintPreviewOpen} onClose={() => { setIsPrintPreviewOpen(false); if (pdfDataUrl) URL.revokeObjectURL(pdfDataUrl); }} onPrint={handlePrint} pdfDataUrl={pdfDataUrl} setOrientation={setOrientation} setZoom={setZoom} />
           </div>
         </div>
       );
     }
-
     ReactDOM.render(<App />, document.getElementById("root"));
   </script>
 </body>
